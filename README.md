@@ -7,7 +7,7 @@
 4. The **Phone** connects to the **Website** specified in the HTTP proxy request.
 
 ```mermaid
-flowchart LR
+flowchart BT
     B[Browser] -- 2 --> P[Proxy]
     M[Phone] -- 1 --> P
     P -- 3 --> M
