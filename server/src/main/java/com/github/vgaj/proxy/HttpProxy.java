@@ -47,16 +47,31 @@ public class HttpProxy {
                 SelectionKey key = keys.next();
                 keys.remove();
 
-                if (!key.isValid()) continue;
+                if (!key.isValid())
+                    continue;
 
                 if (key.isAcceptable()) {
-                    SocketChannel client = server.accept();
-                    client.configureBlocking(false);
-                    client.register(selector, SelectionKey.OP_READ);
+                    try {
+                        SocketChannel client = server.accept();
+                        client.configureBlocking(false);
+                        client.register(selector, SelectionKey.OP_READ);
+                    } catch (IOException e) {
+                        System.out.println("ERROR: failed to accept connection: " + e.getMessage());
+                    }
                 } else if (key.isConnectable()) {
-                    handleConnect(key, selector);
+                    try {
+                        handleConnect(key, selector);
+                    } catch (IOException e) {
+                        System.out.println("ERROR: failed to connect: " + e.getMessage());
+                        close(key.channel());
+                    }
                 } else if (key.isReadable()) {
-                    handleRead(key, selector);
+                    try {
+                        handleRead(key, selector);
+                    } catch (Exception e) {
+                        System.out.println("ERROR: failed to read: " + e.getMessage());
+                        close(key.channel());
+                    }
                 }
             }
         }
@@ -70,7 +85,9 @@ public class HttpProxy {
             registerTunnels(selector, pending.client, server, pending.buffer, pending.isConnect);
         }
     }
-    private static void registerTunnels(Selector selector, SocketChannel channel, SocketChannel server, ByteBuffer buf, boolean isConnect) throws IOException {
+
+    private static void registerTunnels(Selector selector, SocketChannel channel, SocketChannel server, ByteBuffer buf,
+            boolean isConnect) throws IOException {
         Connection c1 = new Connection();
         Connection c2 = new Connection();
         c1.peer = server;
@@ -131,7 +148,6 @@ public class HttpProxy {
                 }
             }
 
-
             if (host == null) {
                 System.out.println("ERROR: Unable to identify host from: " + request);
                 channel.close();
@@ -142,7 +158,7 @@ public class HttpProxy {
 
             SocketChannel server = SocketChannel.open();
             server.configureBlocking(false);
-            
+
             if (!server.connect(new InetSocketAddress(host, port))) {
                 server.register(selector, SelectionKey.OP_CONNECT, new PendingConnection(channel, buf, isConnect));
                 key.interestOps(0);
@@ -172,9 +188,17 @@ public class HttpProxy {
         conn.buffer.clear();
     }
 
-    private static void close(Channel a, Channel b) {
+    private static void close(SocketChannel a, SocketChannel b) {
         System.out.println("Connection closed, count is now " + --count);
-        try { a.close(); } catch (IOException ignored) {}
-        try { b.close(); } catch (IOException ignored) {}
+        close(a);
+        close(b);
     }
+
+    private static void close(Channel chan) {
+        try {
+            chan.close();
+        } catch (IOException ignored) {
+        }
+    }
+
 }
