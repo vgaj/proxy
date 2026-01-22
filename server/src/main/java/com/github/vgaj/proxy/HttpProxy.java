@@ -10,22 +10,9 @@ public class HttpProxy {
 
     private static int count = 0;
 
-    private static class Connection {
-        SocketChannel peer;
-        ByteBuffer buffer = ByteBuffer.allocateDirect(8192);
-    }
+    private record Connection(SelectionKey peerKey, ByteBuffer buffer) {}
 
-    private static class PendingConnection {
-        SocketChannel client;
-        ByteBuffer buffer;
-        boolean isConnect;
-
-        PendingConnection(SocketChannel client, ByteBuffer buffer, boolean isConnect) {
-            this.client = client;
-            this.buffer = buffer;
-            this.isConnect = isConnect;
-        }
-    }
+    private record PendingConnection(SelectionKey clientKey, ByteBuffer buffer, boolean isConnect) {}
 
     public static void main(String[] args) throws Exception {
         int port = 8888;
@@ -63,14 +50,21 @@ public class HttpProxy {
                         handleConnect(key, selector);
                     } catch (IOException e) {
                         System.out.println("ERROR: failed to connect: " + e.getMessage());
-                        close(key.channel());
+                        close(key);
                     }
                 } else if (key.isReadable()) {
                     try {
                         handleRead(key, selector);
                     } catch (Exception e) {
                         System.out.println("ERROR: failed to read: " + e.getMessage());
-                        close(key.channel());
+                        close(key);
+                    }
+                } else if (key.isWritable()) {
+                    try {
+                        handleWrite(key);
+                    } catch (Exception e) {
+                        System.out.println("ERROR: failed to write: " + e.getMessage());
+                        close(key);
                     }
                 }
             }
@@ -82,23 +76,29 @@ public class HttpProxy {
         PendingConnection pending = (PendingConnection) key.attachment();
 
         if (server.finishConnect()) {
-            registerTunnels(selector, pending.client, server, pending.buffer, pending.isConnect);
+            registerTunnels(pending.clientKey(), key, pending.buffer(), pending.isConnect());
         }
     }
 
-    private static void registerTunnels(Selector selector, SocketChannel channel, SocketChannel server, ByteBuffer buf,
+    private static void registerTunnels(
+            SelectionKey clientKey,
+            SelectionKey serverKey,
+            ByteBuffer buf,
             boolean isConnect) throws IOException {
-        Connection c1 = new Connection();
-        Connection c2 = new Connection();
-        c1.peer = server;
-        c2.peer = channel;
+        Connection c1 = new Connection(serverKey, ByteBuffer.allocateDirect(8192));
+        Connection c2 = new Connection(clientKey, ByteBuffer.allocateDirect(8192));
 
-        channel.register(selector, SelectionKey.OP_READ, c1);
-        server.register(selector, SelectionKey.OP_READ, c2);
+        SocketChannel client = (SocketChannel) clientKey.channel();
+        SocketChannel server = (SocketChannel) serverKey.channel();
+
+        clientKey.attach(c1);
+        serverKey.attach(c2);
+
+        clientKey.interestOps(SelectionKey.OP_READ);
+        serverKey.interestOps(SelectionKey.OP_READ);
 
         if (isConnect) {
-            channel.write(ByteBuffer.wrap(
-                    "HTTP/1.1 200 Connection Established\r\n\r\n".getBytes()));
+            client.write(ByteBuffer.wrap("HTTP/1.1 200 Connection Established\r\n\r\n".getBytes()));
         } else {
             server.write(ByteBuffer.wrap(buf.array(), 0, buf.limit()));
         }
@@ -106,10 +106,9 @@ public class HttpProxy {
 
     private static void handleRead(SelectionKey key, Selector selector) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
-        Connection conn = (Connection) key.attachment();
+        Object attachment = key.attachment();
 
-        if (conn == null) {
-
+        if (attachment == null) {
             // First read: parse request and connect upstream
             ByteBuffer buf = ByteBuffer.allocate(4096);
             int n = channel.read(buf);
@@ -160,44 +159,68 @@ public class HttpProxy {
             server.configureBlocking(false);
 
             if (!server.connect(new InetSocketAddress(host, port))) {
-                server.register(selector, SelectionKey.OP_CONNECT, new PendingConnection(channel, buf, isConnect));
+                SelectionKey serverKey = server.register(selector, SelectionKey.OP_CONNECT);
+                serverKey.attach(new PendingConnection(key, buf, isConnect));
                 key.interestOps(0);
             } else {
-                registerTunnels(selector, channel, server, buf, isConnect);
+                SelectionKey serverKey = server.register(selector, 0);
+                registerTunnels(key, serverKey, buf, isConnect);
             }
-
             return;
         }
+
+        Connection conn = (Connection) attachment;
 
         // Normal data forwarding
         int read;
         try {
-            read = channel.read(conn.buffer);
+            read = channel.read(conn.buffer());
         } catch (IOException e) {
-            System.out.println(e.toString());
-            close(channel, conn.peer);
-            return;
+            read = -1;
         }
         if (read == -1) {
-            close(channel, conn.peer);
+            close(key);
+            close(conn.peerKey());
+            System.out.println("Connection closed, count is now " + --count);
             return;
         }
 
-        conn.buffer.flip();
-        conn.peer.write(conn.buffer);
-        conn.buffer.clear();
+        conn.buffer().flip();
+        writeToPeer(key, conn);
     }
 
-    private static void close(SocketChannel a, SocketChannel b) {
-        System.out.println("Connection closed, count is now " + --count);
-        close(a);
-        close(b);
+    private static void handleWrite(SelectionKey key) throws IOException {
+        Connection conn = (Connection) key.attachment();
+        SelectionKey sourceKey = conn.peerKey();
+        Connection sourceConn = (Connection) sourceKey.attachment();
+        writeToPeer(sourceKey, sourceConn);
     }
 
-    private static void close(Channel chan) {
-        try {
-            chan.close();
-        } catch (IOException ignored) {
+    private static void writeToPeer(SelectionKey sourceKey, Connection sourceConn) throws IOException {
+        SelectionKey destKey = sourceConn.peerKey();
+        SocketChannel dest = (SocketChannel) destKey.channel();
+
+        dest.write(sourceConn.buffer());
+
+        if (sourceConn.buffer().hasRemaining()) {
+            // Buffer full, enable write on dest, disable read on source
+            sourceKey.interestOps(sourceKey.interestOps() & ~SelectionKey.OP_READ);
+            destKey.interestOps(destKey.interestOps() | SelectionKey.OP_WRITE);
+        } else {
+            // Buffer drained, disable write on dest, enable read on source
+            sourceConn.buffer().clear();
+            destKey.interestOps(destKey.interestOps() & ~SelectionKey.OP_WRITE);
+            sourceKey.interestOps(sourceKey.interestOps() | SelectionKey.OP_READ);
+        }
+    }
+
+    private static void close(SelectionKey key) {
+        if (key != null) {
+            try {
+                key.channel().close();
+            } catch (IOException ignored) {
+            }
+            key.cancel();
         }
     }
 
