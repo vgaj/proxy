@@ -3,8 +3,11 @@ package com.github.vgaj.proxy;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.*;
-import java.util.*;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
 
 public class HttpProxy {
 
@@ -34,8 +37,7 @@ public class HttpProxy {
                 SelectionKey key = keys.next();
                 keys.remove();
 
-                if (!key.isValid())
-                    continue;
+                if (!key.isValid()) continue;
 
                 if (key.isAcceptable()) {
                     try {
@@ -47,7 +49,12 @@ public class HttpProxy {
                     }
                 } else if (key.isConnectable()) {
                     try {
-                        handleConnect(key, selector);
+                        SocketChannel channel = (SocketChannel) key.channel();
+                        PendingConnection pending = (PendingConnection) key.attachment();
+
+                        if (channel.finishConnect()) {
+                            pairUpChannels(pending.clientKey(), key, pending.buffer(), pending.isConnect());
+                        }
                     } catch (IOException e) {
                         System.out.println("ERROR: failed to connect: " + e.getMessage());
                         close(key);
@@ -71,20 +78,7 @@ public class HttpProxy {
         }
     }
 
-    private static void handleConnect(SelectionKey key, Selector selector) throws IOException {
-        SocketChannel server = (SocketChannel) key.channel();
-        PendingConnection pending = (PendingConnection) key.attachment();
-
-        if (server.finishConnect()) {
-            registerTunnels(pending.clientKey(), key, pending.buffer(), pending.isConnect());
-        }
-    }
-
-    private static void registerTunnels(
-            SelectionKey clientKey,
-            SelectionKey serverKey,
-            ByteBuffer buf,
-            boolean isConnect) throws IOException {
+    private static void pairUpChannels(SelectionKey clientKey, SelectionKey serverKey, ByteBuffer buf, boolean isConnect) throws IOException {
         Connection c1 = new Connection(serverKey, ByteBuffer.allocateDirect(8192));
         Connection c2 = new Connection(clientKey, ByteBuffer.allocateDirect(8192));
 
@@ -164,7 +158,7 @@ public class HttpProxy {
                 key.interestOps(0);
             } else {
                 SelectionKey serverKey = server.register(selector, 0);
-                registerTunnels(key, serverKey, buf, isConnect);
+                pairUpChannels(key, serverKey, buf, isConnect);
             }
             return;
         }
