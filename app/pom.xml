@@ -10,6 +10,6 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>com.github.vgaj.proxy.server</artifactId>
+    <artifactId>com.github.vgaj.proxy.app</artifactId>
 
 </project>
