@@ -15,14 +15,20 @@ public class ProxyServer {
 
     private static final int BROWSER_PORT = 8888;
     private static final int MOBILE_PORT = 9999;
+    private static final String DEFAULT_AUTH_CODE = "123456789";
+    private static final String PENDING_AUTH = "PENDING_AUTH";
 
     // Queue of idle mobile connections waiting for work
     private static final Queue<SelectionKey> idleMobiles = new LinkedList<>();
+    private static String expectedAuthCode;
 
     private record BridgeConnection(SelectionKey peerKey, ByteBuffer buffer) {
     }
 
     public static void main(String[] args) throws IOException {
+        expectedAuthCode = System.getenv().getOrDefault("PROXY_AUTH_CODE", DEFAULT_AUTH_CODE);
+        System.out.println("Using auth code: " + expectedAuthCode);
+
         Selector selector = Selector.open();
 
         // Browser Listener
@@ -76,12 +82,9 @@ public class ProxyServer {
         String type = (String) key.attachment();
 
         if ("MOBILE_ACCEPT".equals(type)) {
-            System.out.println("New Mobile connected: " + client.getRemoteAddress());
-            // register simply as reading, but we don't expect data yet, just keep it alive
-            // We treat the first read as "ready" or just add to queue immediately?
-            // Valid simplification: Add to queue immediately.
-            SelectionKey mobileKey = client.register(selector, 0); // Not interested in ops yet
-            idleMobiles.add(mobileKey);
+            System.out.println("New Mobile connected: " + client.getRemoteAddress() + " - awaiting auth");
+            // Register for reading with PENDING_AUTH attachment to read auth code
+            client.register(selector, SelectionKey.OP_READ, PENDING_AUTH);
         } else if ("BROWSER_ACCEPT".equals(type)) {
             System.out.println("New Browser connected: " + client.getRemoteAddress());
 
@@ -117,8 +120,40 @@ public class ProxyServer {
     }
 
     private static void handleRead(SelectionKey key) throws IOException {
-        BridgeConnection conn = (BridgeConnection) key.attachment();
+        Object attachment = key.attachment();
         SocketChannel channel = (SocketChannel) key.channel();
+
+        // Handle pending authentication for mobile connections
+        if (PENDING_AUTH.equals(attachment)) {
+            ByteBuffer authBuffer = ByteBuffer.allocate(9);
+            int read = channel.read(authBuffer);
+            if (read == -1) {
+                System.out.println("Mobile disconnected before auth: " + channel.getRemoteAddress());
+                close(key);
+                return;
+            }
+            if (read < 9) {
+                // Not enough data yet, wait for more
+                return;
+            }
+            authBuffer.flip();
+            byte[] authBytes = new byte[9];
+            authBuffer.get(authBytes);
+            String receivedCode = new String(authBytes, java.nio.charset.StandardCharsets.US_ASCII);
+
+            if (expectedAuthCode.equals(receivedCode)) {
+                System.out.println("Mobile authenticated successfully: " + channel.getRemoteAddress());
+                key.attach(null); // Clear the PENDING_AUTH marker
+                key.interestOps(0); // Not interested in ops until paired
+                idleMobiles.add(key);
+            } else {
+                System.out.println("Mobile auth failed (got '" + receivedCode + "'): " + channel.getRemoteAddress());
+                close(key);
+            }
+            return;
+        }
+
+        BridgeConnection conn = (BridgeConnection) attachment;
 
         if (conn == null) {
             // Should not happen for paired connections

@@ -13,12 +13,14 @@ public class MobileProxy implements Runnable {
 
     private final String serverHost;
     private final int serverPort;
+    private final String authCode;
     private volatile boolean running = true;
     private Selector selector;
 
-    public MobileProxy(String serverHost, int serverPort) {
+    public MobileProxy(String serverHost, int serverPort, String authCode) {
         this.serverHost = serverHost;
         this.serverPort = serverPort;
+        this.authCode = authCode;
     }
 
     private record Connection(SelectionKey peerKey, ByteBuffer buffer) {
@@ -89,7 +91,7 @@ public class MobileProxy implements Runnable {
     }
 
     public static void main(String[] args) throws Exception {
-        new MobileProxy("localhost", 9999).run();
+        new MobileProxy("localhost", 9999, "123456789").run();
     }
 
     private void maintainConnectionPool(Selector selector) throws IOException {
@@ -141,7 +143,10 @@ public class MobileProxy implements Runnable {
     private void handleConnect(SelectionKey key, Selector selector) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
         if (channel.finishConnect()) {
-            System.out.println("Connected to ProxyServer. Waiting for traffic...");
+            System.out.println("Connected to ProxyServer. Sending auth code...");
+            ByteBuffer authBuffer = ByteBuffer.wrap(authCode.getBytes(StandardCharsets.US_ASCII));
+            channel.write(authBuffer);
+            System.out.println("Auth code sent. Waiting for traffic...");
             key.interestOps(SelectionKey.OP_READ);
         }
     }

@@ -6,21 +6,46 @@
     android:padding="16dp"
     android:gravity="center">
 
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Server Host" />
+
     <EditText
         android:id="@+id/etServerHost"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Server Host"
+        android:hint="e.g. 10.0.2.2"
         android:inputType="textUri" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Server Port" />
 
     <EditText
         android:id="@+id/etServerPort"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:hint="Server Port"
+        android:hint="e.g. 9999"
         android:inputType="number"
         android:text="9999" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Auth Code (9 digits)" />
+
+    <EditText
+        android:id="@+id/etAuthCode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="e.g. 123456789"
+        android:inputType="number"
+        android:maxLength="9"
+        android:text="123456789" />
 
     <Button
         android:id="@+id/btnStart"
