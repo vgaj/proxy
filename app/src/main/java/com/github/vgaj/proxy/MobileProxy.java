@@ -9,57 +9,90 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 
-public class MobileProxy {
+public class MobileProxy implements Runnable {
 
-    private static final String SERVER_HOST = "localhost";
-    private static final int SERVER_PORT = 9999;
+    private final String serverHost;
+    private final int serverPort;
+    private volatile boolean running = true;
+    private Selector selector;
+
+    public MobileProxy(String serverHost, int serverPort) {
+        this.serverHost = serverHost;
+        this.serverPort = serverPort;
+    }
 
     private record Connection(SelectionKey peerKey, ByteBuffer buffer) {
     }
 
     private static final int MAX_IDLE = 5;
     private static final int MAX_TOTAL = 100;
-    private static final java.util.Set<SocketChannel> tunnels = new java.util.HashSet<>();
+    private final java.util.Set<SocketChannel> tunnels = new java.util.HashSet<>();
 
-    public static void main(String[] args) throws Exception {
-        Selector selector = Selector.open();
+    public void stop() {
+        running = false;
+        if (selector != null) {
+            selector.wakeup();
+        }
+    }
 
-        System.out.println("MobileProxy started. Targetting " + SERVER_HOST + ":" + SERVER_PORT);
+    @Override
+    public void run() {
+        try {
+            selector = Selector.open();
+            System.out.println("MobileProxy started. Targetting " + serverHost + ":" + serverPort);
 
-        // Initial pool population
-        maintainConnectionPool(selector);
+            // Initial pool population
+            maintainConnectionPool(selector);
 
-        while (true) {
-            selector.select();
-            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+            while (running) {
+                selector.select();
+                if (!running)
+                    break;
 
-            while (keys.hasNext()) {
-                SelectionKey key = keys.next();
-                keys.remove();
+                Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
-                if (!key.isValid())
-                    continue;
+                while (keys.hasNext()) {
+                    SelectionKey key = keys.next();
+                    keys.remove();
 
-                try {
-                    if (key.isConnectable()) {
-                        handleConnect(key, selector);
-                        // A connection succeeded, check if we need to re-balance anything (unlikely,
-                        // but good practice)
-                        maintainConnectionPool(selector);
-                    } else if (key.isReadable()) {
-                        handleRead(key, selector);
-                    } else if (key.isWritable()) {
-                        handleWrite(key);
+                    if (!key.isValid())
+                        continue;
+
+                    try {
+                        if (key.isConnectable()) {
+                            handleConnect(key, selector);
+                            // A connection succeeded, check if we need to re-balance anything (unlikely,
+                            // but good practice)
+                            maintainConnectionPool(selector);
+                        } else if (key.isReadable()) {
+                            handleRead(key, selector);
+                        } else if (key.isWritable()) {
+                            handleWrite(key);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error: " + e.getMessage());
+                        close(key, selector);
                     }
-                } catch (Exception e) {
-                    System.out.println("Error: " + e.getMessage());
-                    close(key, selector);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            if (selector != null) {
+                try {
+                    selector.close();
+                } catch (IOException e) {
+                    // ignore
                 }
             }
         }
     }
 
-    private static void maintainConnectionPool(Selector selector) throws IOException {
+    public static void main(String[] args) throws Exception {
+        new MobileProxy("localhost", 9999).run();
+    }
+
+    private void maintainConnectionPool(Selector selector) throws IOException {
         int idleOrPending = 0;
         Iterator<SocketChannel> it = tunnels.iterator();
         while (it.hasNext()) {
@@ -97,15 +130,15 @@ public class MobileProxy {
         }
     }
 
-    private static void initiateConnection(Selector selector) throws IOException {
+    private void initiateConnection(Selector selector) throws IOException {
         SocketChannel tunnel = SocketChannel.open();
         tunnel.configureBlocking(false);
-        tunnel.connect(new InetSocketAddress(SERVER_HOST, SERVER_PORT));
+        tunnel.connect(new InetSocketAddress(serverHost, serverPort));
         tunnel.register(selector, SelectionKey.OP_CONNECT);
         tunnels.add(tunnel);
     }
 
-    private static void handleConnect(SelectionKey key, Selector selector) throws IOException {
+    private void handleConnect(SelectionKey key, Selector selector) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
         if (channel.finishConnect()) {
             System.out.println("Connected to ProxyServer. Waiting for traffic...");
@@ -113,7 +146,7 @@ public class MobileProxy {
         }
     }
 
-    private static void handleRead(SelectionKey key, Selector selector) throws IOException {
+    private void handleRead(SelectionKey key, Selector selector) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
         Object attachment = key.attachment();
 
@@ -153,7 +186,7 @@ public class MobileProxy {
         writeToPeer(key, conn);
     }
 
-    private static void processInitialRequest(SelectionKey tunnelKey, Selector selector, ByteBuffer buffer)
+    private void processInitialRequest(SelectionKey tunnelKey, Selector selector, ByteBuffer buffer)
             throws IOException {
         String request = new String(buffer.array(), 0, buffer.limit(), StandardCharsets.ISO_8859_1);
 
@@ -214,7 +247,7 @@ public class MobileProxy {
         registerTarget(selector, tunnelKey, target, buffer, headerEnd, isConnect);
     }
 
-    private static void registerTarget(Selector selector, SelectionKey tunnelKey, SocketChannel target,
+    private void registerTarget(Selector selector, SelectionKey tunnelKey, SocketChannel target,
             ByteBuffer buffer, int dataStart, boolean isConnect) throws IOException {
         SelectionKey targetKey = target.register(selector, SelectionKey.OP_READ);
 
@@ -262,14 +295,14 @@ public class MobileProxy {
         }
     }
 
-    private static void handleWrite(SelectionKey key) throws IOException {
+    private void handleWrite(SelectionKey key) throws IOException {
         Connection conn = (Connection) key.attachment();
         SelectionKey sourceKey = conn.peerKey;
         Connection sourceConn = (Connection) sourceKey.attachment();
         writeToPeer(sourceKey, sourceConn);
     }
 
-    private static void writeToPeer(SelectionKey sourceKey, Connection sourceConn) throws IOException {
+    private void writeToPeer(SelectionKey sourceKey, Connection sourceConn) throws IOException {
         SelectionKey destKey = sourceConn.peerKey;
         SocketChannel dest = (SocketChannel) destKey.channel();
 
@@ -285,7 +318,7 @@ public class MobileProxy {
         }
     }
 
-    private static void close(SelectionKey key, Selector selector) {
+    private void close(SelectionKey key, Selector selector) {
         if (key != null) {
             try {
                 key.channel().close();

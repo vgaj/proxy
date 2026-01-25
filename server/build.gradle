@@ -1,0 +1,15 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.github.vgaj.proxy'
+version = '1.0-SNAPSHOT'
+
+dependencies {
+    // Add dependencies here if needed
+}
+
+application {
+    mainClass = 'com.github.vgaj.proxy.ProxyServer'
+}
