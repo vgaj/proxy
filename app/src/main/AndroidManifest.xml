@@ -8,8 +8,6 @@
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="Proxy App"
-        android:roundIcon="@drawable/ic_launcher"
-        android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"

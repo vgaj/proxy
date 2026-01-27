@@ -5,15 +5,17 @@ import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.util.Log;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
-public class MainActivity extends AppCompatActivity {
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
+public class MainActivity extends AppCompatActivity implements MobileProxy.ConnectionListener {
 
     private static final String PREFS_NAME = "ProxyPrefs";
     private static final String KEY_HOST = "server_host";
@@ -25,10 +27,14 @@ public class MainActivity extends AppCompatActivity {
     private EditText etAuthCode;
     private Button btnStart;
     private Button btnStop;
+    private Button btnClearLog;
     private TextView tvStatus;
+    private TextView tvLog;
+    private ScrollView svLog;
 
     private MobileProxy proxy;
     private Thread proxyThread;
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +46,10 @@ public class MainActivity extends AppCompatActivity {
         etAuthCode = findViewById(R.id.etAuthCode);
         btnStart = findViewById(R.id.btnStart);
         btnStop = findViewById(R.id.btnStop);
+        btnClearLog = findViewById(R.id.btnClearLog);
         tvStatus = findViewById(R.id.tvStatus);
+        tvLog = findViewById(R.id.tvLog);
+        svLog = findViewById(R.id.svLog);
 
         loadPreferences();
 
@@ -65,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
         btnStart.setOnClickListener(v -> startProxy());
         btnStop.setOnClickListener(v -> stopProxy());
+        btnClearLog.setOnClickListener(v -> tvLog.setText(""));
     }
 
     private void validateInputs() {
@@ -130,6 +140,7 @@ public class MainActivity extends AppCompatActivity {
 
         String authCode = etAuthCode.getText().toString();
         proxy = new MobileProxy(host, port, authCode);
+        proxy.setConnectionListener(this);
         proxyThread = new Thread(proxy);
         proxyThread.start();
 
@@ -165,5 +176,25 @@ public class MainActivity extends AppCompatActivity {
                 validateInputs();
             }
         });
+    }
+
+    private void appendLog(String message) {
+        runOnUiThread(() -> {
+            String timestamp = timeFormat.format(new Date());
+            String logEntry = "[" + timestamp + "] " + message + "\n";
+            tvLog.append(logEntry);
+            svLog.post(() -> svLog.fullScroll(ScrollView.FOCUS_DOWN));
+        });
+    }
+
+    @Override
+    public void onConnectionSuccess(String host, int port) {
+        appendLog("OK: " + host + ":" + port);
+    }
+
+    @Override
+    public void onConnectionFailure(String host, int port, String request, String error) {
+        String firstLine = request.split("\r\n")[0];
+        appendLog("FAILED: " + host + ":" + port + " - " + error + "\n    Request: " + firstLine);
     }
 }

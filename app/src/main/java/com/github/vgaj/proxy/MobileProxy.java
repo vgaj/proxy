@@ -11,16 +11,26 @@ import java.util.Iterator;
 
 public class MobileProxy implements Runnable {
 
+    public interface ConnectionListener {
+        void onConnectionSuccess(String host, int port);
+        void onConnectionFailure(String host, int port, String request, String error);
+    }
+
     private final String serverHost;
     private final int serverPort;
     private final String authCode;
     private volatile boolean running = true;
     private Selector selector;
+    private ConnectionListener listener;
 
     public MobileProxy(String serverHost, int serverPort, String authCode) {
         this.serverHost = serverHost;
         this.serverPort = serverPort;
         this.authCode = authCode;
+    }
+
+    public void setConnectionListener(ConnectionListener listener) {
+        this.listener = listener;
     }
 
     private record Connection(SelectionKey peerKey, ByteBuffer buffer) {
@@ -232,6 +242,9 @@ public class MobileProxy implements Runnable {
 
         if (host == null) {
             System.err.println("Could not parse host from request");
+            if (listener != null) {
+                listener.onConnectionFailure("unknown", 0, request, "Could not parse host from request");
+            }
             tunnelKey.channel().close();
             return;
         }
@@ -245,8 +258,15 @@ public class MobileProxy implements Runnable {
             target.configureBlocking(false);
         } catch (IOException e) {
             System.err.println("Failed to connect: " + e.getMessage());
+            if (listener != null) {
+                listener.onConnectionFailure(host, port, request, e.getMessage());
+            }
             tunnelKey.channel().close();
             return;
+        }
+
+        if (listener != null) {
+            listener.onConnectionSuccess(host, port);
         }
 
         registerTarget(selector, tunnelKey, target, buffer, headerEnd, isConnect);
