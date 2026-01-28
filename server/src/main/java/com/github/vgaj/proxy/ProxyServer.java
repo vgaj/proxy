@@ -15,7 +15,7 @@ public class ProxyServer {
 
     private static final int BROWSER_PORT = 8888;
     private static final int MOBILE_PORT = 9999;
-    private static final String DEFAULT_AUTH_CODE = "123456789";
+    private static final String DEFAULT_AUTH_CODE = "5678";
     private static final String PENDING_AUTH = "PENDING_AUTH";
 
     // Queue of idle mobile connections waiting for work
@@ -125,19 +125,15 @@ public class ProxyServer {
 
         // Handle pending authentication for mobile connections
         if (PENDING_AUTH.equals(attachment)) {
-            ByteBuffer authBuffer = ByteBuffer.allocate(9);
+            ByteBuffer authBuffer = ByteBuffer.allocate(expectedAuthCode.length());
             int read = channel.read(authBuffer);
             if (read == -1) {
                 System.out.println("Mobile disconnected before auth: " + channel.getRemoteAddress());
                 close(key);
                 return;
             }
-            if (read < 9) {
-                // Not enough data yet, wait for more
-                return;
-            }
             authBuffer.flip();
-            byte[] authBytes = new byte[9];
+            byte[] authBytes = new byte[expectedAuthCode.length()];
             authBuffer.get(authBytes);
             String receivedCode = new String(authBytes, java.nio.charset.StandardCharsets.US_ASCII);
 

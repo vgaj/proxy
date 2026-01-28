@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
 
         boolean hostValid = !TextUtils.isEmpty(host);
         boolean portValid = !TextUtils.isEmpty(port);
-        boolean authCodeValid = authCode.length() == 9;
+        boolean authCodeValid = authCode.length() == 4;
 
         btnStart.setEnabled(hostValid && portValid && authCodeValid);
     }
@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         SharedPreferences settings = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String host = settings.getString(KEY_HOST, "");
         int port = settings.getInt(KEY_PORT, 9999);
-        String authCode = settings.getString(KEY_AUTH_CODE, "123456789");
+        String authCode = settings.getString(KEY_AUTH_CODE, "5678");
 
         etServerHost.setText(host);
         etServerPort.setText(String.valueOf(port));
@@ -178,18 +178,36 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         });
     }
 
+    private static final int MAX_LOG_LINES = 20;
+
     private void appendLog(String message) {
         runOnUiThread(() -> {
             String timestamp = timeFormat.format(new Date());
-            String logEntry = "[" + timestamp + "] " + message + "\n";
-            tvLog.append(logEntry);
+            String logEntry = "[" + timestamp + "] " + message;
+            String currentText = tvLog.getText().toString();
+            String[] lines = currentText.isEmpty() ? new String[0] : currentText.split("\n");
+
+            StringBuilder sb = new StringBuilder();
+            int startIndex = Math.max(0, lines.length - MAX_LOG_LINES + 1);
+            for (int i = startIndex; i < lines.length; i++) {
+                sb.append(lines[i]).append("\n");
+            }
+            sb.append(logEntry);
+
+            tvLog.setText(sb.toString());
             svLog.post(() -> svLog.fullScroll(ScrollView.FOCUS_DOWN));
         });
     }
 
     @Override
+    public void onRequestReceived(String request) {
+        String firstLine = request != null ? request.split("\r\n")[0] : null;
+        appendLog("REQUEST: " + firstLine);
+    }
+
+    @Override
     public void onConnectionSuccess(String host, int port) {
-        appendLog("OK: " + host + ":" + port);
+        appendLog("CONNECTED: " + host + ":" + port);
     }
 
     @Override
@@ -197,4 +215,15 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         String firstLine = request.split("\r\n")[0];
         appendLog("FAILED: " + host + ":" + port + " - " + error + "\n    Request: " + firstLine);
     }
+
+    @Override
+    public void onServerConnectionFailed(String error) {
+        appendLog("SERVER ERROR: " + error + " - retrying in 1 minute");
+    }
+
+    @Override
+    public void onServerConnectionAttempt(String serverHost, int serverPort) {
+        appendLog("CONNECTING TO SERVER: " + serverHost + ":" + serverPort);
+    }
+
 }

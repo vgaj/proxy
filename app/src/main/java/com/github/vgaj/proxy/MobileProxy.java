@@ -12,14 +12,18 @@ import java.util.Iterator;
 public class MobileProxy implements Runnable {
 
     public interface ConnectionListener {
+        void onRequestReceived(String request);
         void onConnectionSuccess(String host, int port);
         void onConnectionFailure(String host, int port, String request, String error);
+        void onServerConnectionFailed(String error);
+        void onServerConnectionAttempt(String serverHost, int serverPort);
     }
 
     private final String serverHost;
     private final int serverPort;
     private final String authCode;
     private volatile boolean running = true;
+    private volatile boolean retryScheduled = false;
     private Selector selector;
     private ConnectionListener listener;
 
@@ -36,7 +40,7 @@ public class MobileProxy implements Runnable {
     private record Connection(SelectionKey peerKey, ByteBuffer buffer) {
     }
 
-    private static final int MAX_IDLE = 5;
+    private static final int MAX_IDLE = 10;
     private static final int MAX_TOTAL = 100;
     private final java.util.Set<SocketChannel> tunnels = new java.util.HashSet<>();
 
@@ -54,12 +58,18 @@ public class MobileProxy implements Runnable {
             System.out.println("MobileProxy started. Targetting " + serverHost + ":" + serverPort);
 
             // Initial pool population
+            if (listener != null) {
+                listener.onServerConnectionAttempt(serverHost, serverPort);
+            }
             maintainConnectionPool(selector);
 
             while (running) {
                 selector.select();
                 if (!running)
                     break;
+
+                // Maintain pool after select wakes up (handles retry after backoff)
+                maintainConnectionPool(selector);
 
                 Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
 
@@ -100,11 +110,10 @@ public class MobileProxy implements Runnable {
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        new MobileProxy("localhost", 9999, "123456789").run();
-    }
-
     private void maintainConnectionPool(Selector selector) throws IOException {
+        if (retryScheduled) {
+            return; // Don't create new connections while waiting to retry
+        }
         int idleOrPending = 0;
         Iterator<SocketChannel> it = tunnels.iterator();
         while (it.hasNext()) {
@@ -142,22 +151,65 @@ public class MobileProxy implements Runnable {
         }
     }
 
-    private void initiateConnection(Selector selector) throws IOException {
-        SocketChannel tunnel = SocketChannel.open();
-        tunnel.configureBlocking(false);
-        tunnel.connect(new InetSocketAddress(serverHost, serverPort));
-        tunnel.register(selector, SelectionKey.OP_CONNECT);
-        tunnels.add(tunnel);
+    private void initiateConnection(Selector selector) {
+        try {
+            SocketChannel tunnel = SocketChannel.open();
+            tunnel.configureBlocking(false);
+            tunnel.connect(new InetSocketAddress(serverHost, serverPort));
+            tunnel.register(selector, SelectionKey.OP_CONNECT);
+            tunnels.add(tunnel);
+        } catch (IOException e) {
+            notifyServerConnectionFailed("Failed to initiate connection: " + e.getMessage());
+        }
+    }
+
+    private void notifyServerConnectionFailed(String error) {
+        System.err.println(error + " - retrying in 1 minute");
+        if (!retryScheduled) {
+            if (listener != null) {
+                listener.onServerConnectionFailed(error);
+            }
+            scheduleRetry();
+        }
+    }
+
+    private void scheduleRetry() {
+        retryScheduled = true;
+        new Thread(() -> {
+            try {
+                Thread.sleep(60000); // 1 minute
+                if (listener != null) {
+                    listener.onServerConnectionAttempt(serverHost, serverPort);
+                }
+                retryScheduled = false;
+                if (running && selector != null) {
+                    selector.wakeup();
+                }
+            } catch (InterruptedException ignored) {
+                retryScheduled = false;
+            }
+        }).start();
     }
 
     private void handleConnect(SelectionKey key, Selector selector) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
-        if (channel.finishConnect()) {
-            System.out.println("Connected to ProxyServer. Sending auth code...");
-            ByteBuffer authBuffer = ByteBuffer.wrap(authCode.getBytes(StandardCharsets.US_ASCII));
-            channel.write(authBuffer);
-            System.out.println("Auth code sent. Waiting for traffic...");
-            key.interestOps(SelectionKey.OP_READ);
+        try {
+            if (channel.finishConnect()) {
+                retryScheduled = false; // Connection succeeded, clear backoff
+                System.out.println("Connected to ProxyServer. Sending auth code...");
+                ByteBuffer authBuffer = ByteBuffer.wrap(authCode.getBytes(StandardCharsets.US_ASCII));
+                channel.write(authBuffer);
+                System.out.println("Auth code sent. Waiting for traffic...");
+                key.interestOps(SelectionKey.OP_READ);
+            }
+        } catch (IOException e) {
+            tunnels.remove(channel);
+            key.cancel();
+            try {
+                channel.close();
+            } catch (IOException ignored) {
+            }
+            notifyServerConnectionFailed("Failed to connect to server: " + e.getMessage());
         }
     }
 
@@ -204,6 +256,10 @@ public class MobileProxy implements Runnable {
     private void processInitialRequest(SelectionKey tunnelKey, Selector selector, ByteBuffer buffer)
             throws IOException {
         String request = new String(buffer.array(), 0, buffer.limit(), StandardCharsets.ISO_8859_1);
+
+        if (listener != null) {
+            listener.onRequestReceived(request);
+        }
 
         String host = null;
         int port = 80;

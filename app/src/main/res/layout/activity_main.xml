@@ -35,16 +35,16 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="Auth Code (9 digits)" />
+        android:text="PIN (4 digits)" />
 
     <EditText
         android:id="@+id/etAuthCode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="e.g. 123456789"
+        android:hint="e.g. 5678"
         android:inputType="number"
-        android:maxLength="9"
-        android:text="123456789" />
+        android:maxLength="4"
+        android:text="5678" />
 
     <Button
         android:id="@+id/btnStart"
