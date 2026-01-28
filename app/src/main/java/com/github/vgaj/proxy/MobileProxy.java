@@ -51,6 +51,28 @@ public class MobileProxy implements Runnable {
         }
     }
 
+    private void closeAllConnections() {
+        // Close all tunnels
+        for (SocketChannel tunnel : tunnels) {
+            try {
+                tunnel.close();
+            } catch (IOException ignored) {
+            }
+        }
+        tunnels.clear();
+
+        // Close all registered keys (includes target connections)
+        if (selector != null) {
+            for (SelectionKey key : selector.keys()) {
+                try {
+                    key.channel().close();
+                } catch (IOException ignored) {
+                }
+                key.cancel();
+            }
+        }
+    }
+
     @Override
     public void run() {
         try {
@@ -100,6 +122,7 @@ public class MobileProxy implements Runnable {
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
+            closeAllConnections();
             if (selector != null) {
                 try {
                     selector.close();

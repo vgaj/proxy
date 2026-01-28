@@ -31,6 +31,22 @@ public class ProxyServer {
 
         Selector selector = Selector.open();
 
+        // Register shutdown hook to close all connections cleanly
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutting down - closing all connections...");
+            for (SelectionKey key : selector.keys()) {
+                try {
+                    key.channel().close();
+                } catch (IOException ignored) {
+                }
+            }
+            try {
+                selector.close();
+            } catch (IOException ignored) {
+            }
+            System.out.println("Shutdown complete.");
+        }));
+
         // Browser Listener
         ServerSocketChannel browserServer = ServerSocketChannel.open();
         browserServer.configureBlocking(false);
