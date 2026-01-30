@@ -3,100 +3,128 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="8dp">
 
-    <TextView
+    <!-- Row 1: Host, Port, PIN on one line -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Server Host" />
+        android:orientation="horizontal">
 
-    <EditText
-        android:id="@+id/etServerHost"
+        <EditText
+            android:id="@+id/etServerHost"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="3"
+            android:hint="Host"
+            android:inputType="textUri"
+            android:textSize="14sp" />
+
+        <EditText
+            android:id="@+id/etServerPort"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:hint="Port"
+            android:inputType="number"
+            android:text="9999"
+            android:textSize="14sp" />
+
+        <EditText
+            android:id="@+id/etAuthCode"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:hint="PIN"
+            android:inputType="number"
+            android:maxLength="4"
+            android:text="5678"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <!-- Row 2: Start, Stop buttons and Status on one line -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="e.g. 10.0.2.2"
-        android:inputType="textUri" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="4dp">
 
-    <TextView
+        <Button
+            android:id="@+id/btnStart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Start"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:text="Stop"
+            android:enabled="false"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:text="Status: Stopped"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <!-- Row 3: Log label + Clear button -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Server Port" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="4dp">
 
-    <EditText
-        android:id="@+id/etServerPort"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="e.g. 9999"
-        android:inputType="number"
-        android:text="9999" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Connection Log"
+            android:textSize="13sp" />
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="PIN (4 digits)" />
+        <Button
+            android:id="@+id/btnClearLog"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="?android:attr/buttonBarButtonStyle"
+            android:text="Clear"
+            android:textSize="12sp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+    </LinearLayout>
 
-    <EditText
-        android:id="@+id/etAuthCode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="e.g. 5678"
-        android:inputType="number"
-        android:maxLength="4"
-        android:text="5678" />
-
-    <Button
-        android:id="@+id/btnStart"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="Start Proxy" />
-
-    <Button
-        android:id="@+id/btnStop"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Stop Proxy"
-        android:enabled="false"/>
-
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="Status: Stopped" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Connection Log:" />
-
+    <!-- Log area: takes all remaining space -->
     <ScrollView
         android:id="@+id/svLog"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="2dp"
         android:background="#F0F0F0"
-        android:padding="8dp">
+        android:padding="6dp">
 
         <TextView
             android:id="@+id/tvLog"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:fontFamily="monospace"
             android:text="" />
     </ScrollView>
-
-    <Button
-        android:id="@+id/btnClearLog"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Clear Log" />
 
 </LinearLayout>
