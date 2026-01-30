@@ -7,10 +7,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.Map;
 import java.util.Queue;
 
 public class ProxyServer {
@@ -20,11 +18,8 @@ public class ProxyServer {
     private static final String DEFAULT_AUTH_CODE = "5678";
     private static final String PENDING_AUTH = "PENDING_AUTH";
 
-    // App IP -> queue of idle authenticated mobile connections from that app
-    private static final Map<String, Queue<SelectionKey>> idleMobilesByApp = new HashMap<>();
-
-    // Browser IP -> app IP it was last paired with
-    private static final Map<String, String> browserToAppAffinity = new HashMap<>();
+    // Queue of idle mobile connections waiting for work
+    private static final Queue<SelectionKey> idleMobiles = new LinkedList<>();
     private static String expectedAuthCode;
 
     private record BridgeConnection(SelectionKey peerKey, ByteBuffer buffer) {
@@ -109,31 +104,9 @@ public class ProxyServer {
         } else if ("BROWSER_ACCEPT".equals(type)) {
             System.out.println("New Browser connected: " + client.getRemoteAddress());
 
-            String browserIp = getIp(client);
-            String preferredApp = browserToAppAffinity.get(browserIp);
-
-            SelectionKey mobileKey = null;
-            String selectedAppIp = null;
-
-            // Try preferred app first (affinity)
-            if (preferredApp != null) {
-                mobileKey = pollValidKey(preferredApp);
-                if (mobileKey != null) {
-                    selectedAppIp = preferredApp;
-                }
-            }
-
-            // Fall back to any available app
-            if (mobileKey == null) {
-                Iterator<Map.Entry<String, Queue<SelectionKey>>> it = idleMobilesByApp.entrySet().iterator();
-                while (it.hasNext()) {
-                    Map.Entry<String, Queue<SelectionKey>> entry = it.next();
-                    mobileKey = pollValidKey(entry.getKey());
-                    if (mobileKey != null) {
-                        selectedAppIp = entry.getKey();
-                        break;
-                    }
-                }
+            SelectionKey mobileKey = idleMobiles.poll();
+            while (mobileKey != null && !mobileKey.isValid()) {
+                mobileKey = idleMobiles.poll(); // Discard invalid keys
             }
 
             if (mobileKey == null) {
@@ -142,11 +115,8 @@ public class ProxyServer {
                 return;
             }
 
-            browserToAppAffinity.put(browserIp, selectedAppIp);
-
             System.out.println("Pairing Browser " + client.getRemoteAddress() + " with Mobile "
-                    + ((SocketChannel) mobileKey.channel()).getRemoteAddress()
-                    + " (app " + selectedAppIp + ", affinity=" + (selectedAppIp.equals(preferredApp)) + ")");
+                    + ((SocketChannel) mobileKey.channel()).getRemoteAddress());
 
             SelectionKey browserKey = client.register(selector, SelectionKey.OP_READ);
 
@@ -184,11 +154,10 @@ public class ProxyServer {
             String receivedCode = new String(authBytes, java.nio.charset.StandardCharsets.US_ASCII);
 
             if (expectedAuthCode.equals(receivedCode)) {
-                String appIp = getIp(channel);
-                System.out.println("Mobile authenticated successfully: " + channel.getRemoteAddress() + " (app " + appIp + ")");
+                System.out.println("Mobile authenticated successfully: " + channel.getRemoteAddress());
                 key.attach(null); // Clear the PENDING_AUTH marker
                 key.interestOps(0); // Not interested in ops until paired
-                idleMobilesByApp.computeIfAbsent(appIp, k -> new LinkedList<>()).add(key);
+                idleMobiles.add(key);
             } else {
                 System.out.println("Mobile auth failed (got '" + receivedCode + "'): " + channel.getRemoteAddress());
                 close(key);
@@ -241,29 +210,6 @@ public class ProxyServer {
             destKey.interestOps(destKey.interestOps() & ~SelectionKey.OP_WRITE);
             sourceKey.interestOps(sourceKey.interestOps() | SelectionKey.OP_READ);
         }
-    }
-
-    private static String getIp(SocketChannel channel) throws IOException {
-        InetSocketAddress addr = (InetSocketAddress) channel.getRemoteAddress();
-        return addr.getAddress().getHostAddress();
-    }
-
-    private static SelectionKey pollValidKey(String appIp) {
-        Queue<SelectionKey> queue = idleMobilesByApp.get(appIp);
-        if (queue == null) {
-            return null;
-        }
-        while (!queue.isEmpty()) {
-            SelectionKey key = queue.poll();
-            if (key.isValid()) {
-                if (queue.isEmpty()) {
-                    idleMobilesByApp.remove(appIp);
-                }
-                return key;
-            }
-        }
-        idleMobilesByApp.remove(appIp);
-        return null;
     }
 
     private static void close(SelectionKey key) {
