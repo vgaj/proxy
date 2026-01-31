@@ -7,7 +7,9 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -65,7 +67,7 @@ public class MobileProxy implements Runnable {
 
     private static final int MAX_IDLE = 10;
     private static final int MAX_TOTAL = 100;
-    private final java.util.Set<SocketChannel> tunnels = new java.util.HashSet<>();
+    private final Set<SocketChannel> tunnels = new HashSet<>();
 
     public void stop() {
         running = false;
@@ -223,11 +225,15 @@ public class MobileProxy implements Runnable {
         new Thread(() -> {
             try {
                 Thread.sleep(60000); // 1 minute
+                if (!running) {
+                    retryScheduled = false;
+                    return;
+                }
                 if (listener != null) {
                     listener.onServerConnectionAttempt(serverHost, serverPort);
                 }
                 retryScheduled = false;
-                if (running && selector != null) {
+                if (selector != null) {
                     selector.wakeup();
                 }
             } catch (InterruptedException ignored) {

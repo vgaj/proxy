@@ -30,7 +30,6 @@ public class ProxyServer {
 
     // Queue of idle mobile connections waiting for work
     private static final Queue<SelectionKey> idleMobiles = new LinkedList<>();
-    private static String expectedAuthCode;
 
     private record BridgeConnection(SelectionKey peerKey, ByteBuffer buffer) {
     }
@@ -62,7 +61,7 @@ public class ProxyServer {
     }
 
     public static void main(String[] args) throws IOException {
-        expectedAuthCode = System.getenv().getOrDefault("PROXY_AUTH_CODE", DEFAULT_AUTH_CODE);
+        String expectedAuthCode = System.getenv().getOrDefault("PROXY_AUTH_CODE", DEFAULT_AUTH_CODE);
         authKeyBytes = expectedAuthCode.getBytes(StandardCharsets.UTF_8);
         System.out.println("Using auth code: " + expectedAuthCode);
 
@@ -168,19 +167,15 @@ public class ProxyServer {
 
             SelectionKey browserKey = client.register(selector, SelectionKey.OP_READ);
 
-            pairUpChannels(browserKey, mobileKey);
+            BridgeConnection mobileBridge = new BridgeConnection(mobileKey, ByteBuffer.allocateDirect(8192));
+            BridgeConnection browserBridge = new BridgeConnection(browserKey, ByteBuffer.allocateDirect(8192));
+
+            browserKey.attach(mobileBridge);
+            mobileKey.attach(browserBridge);
+
+            browserKey.interestOps(SelectionKey.OP_READ);
+            mobileKey.interestOps(SelectionKey.OP_READ);
         }
-    }
-
-    private static void pairUpChannels(SelectionKey browserKey, SelectionKey mobileKey) {
-        BridgeConnection c1 = new BridgeConnection(mobileKey, ByteBuffer.allocateDirect(8192));
-        BridgeConnection c2 = new BridgeConnection(browserKey, ByteBuffer.allocateDirect(8192));
-
-        browserKey.attach(c1);
-        mobileKey.attach(c2);
-
-        browserKey.interestOps(SelectionKey.OP_READ);
-        mobileKey.interestOps(SelectionKey.OP_READ);
     }
 
     private static void handleRead(SelectionKey key) throws IOException {
@@ -226,8 +221,7 @@ public class ProxyServer {
         int read = -1;
         try {
             read = channel.read(conn.buffer);
-        } catch (IOException e) {
-            read = -1;
+        } catch (IOException ignored) {
         }
 
         if (read == -1) {
