@@ -7,16 +7,26 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Queue;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public class ProxyServer {
 
     private static final int BROWSER_PORT = 8888;
     private static final int MOBILE_PORT = 9999;
     private static final String DEFAULT_AUTH_CODE = "5678";
-    private static final String PENDING_AUTH = "PENDING_AUTH";
+
+    private static final int NONCE_SIZE = 32;
+    private static final int HMAC_SIZE = 32;
+    private static final String HMAC_ALGO = "HmacSHA256";
+    private static final SecureRandom secureRandom = new SecureRandom();
+    private static byte[] authKeyBytes;
 
     // Queue of idle mobile connections waiting for work
     private static final Queue<SelectionKey> idleMobiles = new LinkedList<>();
@@ -25,8 +35,35 @@ public class ProxyServer {
     private record BridgeConnection(SelectionKey peerKey, ByteBuffer buffer) {
     }
 
+    private enum AuthState { SENDING_CHALLENGE, AWAITING_RESPONSE }
+
+    private static final class PendingAuth {
+        AuthState state;
+        final byte[] nonce;
+        final ByteBuffer writeBuffer;   // for sending the nonce
+        final ByteBuffer readBuffer;    // for reading the 32-byte HMAC response
+
+        PendingAuth(byte[] nonce) {
+            this.nonce = nonce;
+            this.state = AuthState.SENDING_CHALLENGE;
+            this.writeBuffer = ByteBuffer.wrap(nonce.clone());
+            this.readBuffer = ByteBuffer.allocate(HMAC_SIZE);
+        }
+    }
+
+    private static byte[] computeHmac(byte[] key, byte[] data) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGO);
+            mac.init(new SecretKeySpec(key, HMAC_ALGO));
+            return mac.doFinal(data);
+        } catch (Exception e) {
+            throw new RuntimeException("HMAC computation failed", e);
+        }
+    }
+
     public static void main(String[] args) throws IOException {
         expectedAuthCode = System.getenv().getOrDefault("PROXY_AUTH_CODE", DEFAULT_AUTH_CODE);
+        authKeyBytes = expectedAuthCode.getBytes(StandardCharsets.UTF_8);
         System.out.println("Using auth code: " + expectedAuthCode);
 
         Selector selector = Selector.open();
@@ -98,9 +135,20 @@ public class ProxyServer {
         String type = (String) key.attachment();
 
         if ("MOBILE_ACCEPT".equals(type)) {
-            System.out.println("New Mobile connected: " + client.getRemoteAddress() + " - awaiting auth");
-            // Register for reading with PENDING_AUTH attachment to read auth code
-            client.register(selector, SelectionKey.OP_READ, PENDING_AUTH);
+            System.out.println("New Mobile connected: " + client.getRemoteAddress() + " - sending challenge");
+            byte[] nonce = new byte[NONCE_SIZE];
+            secureRandom.nextBytes(nonce);
+            PendingAuth pendingAuth = new PendingAuth(nonce);
+            // Try to write the nonce immediately
+            int written = client.write(pendingAuth.writeBuffer);
+            if (pendingAuth.writeBuffer.hasRemaining()) {
+                // Partial write - register for OP_WRITE to finish sending
+                client.register(selector, SelectionKey.OP_WRITE, pendingAuth);
+            } else {
+                // Full nonce sent - transition to awaiting response
+                pendingAuth.state = AuthState.AWAITING_RESPONSE;
+                client.register(selector, SelectionKey.OP_READ, pendingAuth);
+            }
         } else if ("BROWSER_ACCEPT".equals(type)) {
             System.out.println("New Browser connected: " + client.getRemoteAddress());
 
@@ -140,26 +188,29 @@ public class ProxyServer {
         SocketChannel channel = (SocketChannel) key.channel();
 
         // Handle pending authentication for mobile connections
-        if (PENDING_AUTH.equals(attachment)) {
-            ByteBuffer authBuffer = ByteBuffer.allocate(expectedAuthCode.length());
-            int read = channel.read(authBuffer);
+        if (attachment instanceof PendingAuth pendingAuth) {
+            int read = channel.read(pendingAuth.readBuffer);
             if (read == -1) {
-                System.out.println("Mobile disconnected before auth: " + channel.getRemoteAddress());
+                System.out.println("Mobile disconnected during auth: " + channel.getRemoteAddress());
                 close(key);
                 return;
             }
-            authBuffer.flip();
-            byte[] authBytes = new byte[expectedAuthCode.length()];
-            authBuffer.get(authBytes);
-            String receivedCode = new String(authBytes, java.nio.charset.StandardCharsets.US_ASCII);
+            if (pendingAuth.readBuffer.hasRemaining()) {
+                return; // Partial read - wait for more data
+            }
+            // All 32 bytes received - verify HMAC
+            pendingAuth.readBuffer.flip();
+            byte[] receivedHmac = new byte[HMAC_SIZE];
+            pendingAuth.readBuffer.get(receivedHmac);
+            byte[] expectedHmac = computeHmac(authKeyBytes, pendingAuth.nonce);
 
-            if (expectedAuthCode.equals(receivedCode)) {
+            if (MessageDigest.isEqual(expectedHmac, receivedHmac)) {
                 System.out.println("Mobile authenticated successfully: " + channel.getRemoteAddress());
-                key.attach(null); // Clear the PENDING_AUTH marker
+                key.attach(null);
                 key.interestOps(0); // Not interested in ops until paired
                 idleMobiles.add(key);
             } else {
-                System.out.println("Mobile auth failed (got '" + receivedCode + "'): " + channel.getRemoteAddress());
+                System.out.println("HMAC mismatch - Mobile auth failed: " + channel.getRemoteAddress());
                 close(key);
             }
             return;
@@ -190,7 +241,21 @@ public class ProxyServer {
     }
 
     private static void handleWrite(SelectionKey key) throws IOException {
-        BridgeConnection conn = (BridgeConnection) key.attachment();
+        Object attachment = key.attachment();
+
+        // Handle partial nonce write during auth handshake
+        if (attachment instanceof PendingAuth pendingAuth) {
+            SocketChannel channel = (SocketChannel) key.channel();
+            channel.write(pendingAuth.writeBuffer);
+            if (!pendingAuth.writeBuffer.hasRemaining()) {
+                // Nonce fully sent - transition to awaiting HMAC response
+                pendingAuth.state = AuthState.AWAITING_RESPONSE;
+                key.interestOps(SelectionKey.OP_READ);
+            }
+            return;
+        }
+
+        BridgeConnection conn = (BridgeConnection) attachment;
         SelectionKey sourceKey = conn.peerKey;
         BridgeConnection sourceConn = (BridgeConnection) sourceKey.attachment();
         writeToPeer(sourceKey, sourceConn);

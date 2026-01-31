@@ -84,7 +84,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
 
         boolean hostValid = !TextUtils.isEmpty(host);
         boolean portValid = !TextUtils.isEmpty(port);
-        boolean authCodeValid = authCode.length() == 4;
+        boolean authCodeValid = authCode.length() >= 4;
 
         btnStart.setEnabled(hostValid && portValid && authCodeValid);
     }

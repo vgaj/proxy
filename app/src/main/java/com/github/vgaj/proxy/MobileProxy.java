@@ -8,6 +8,8 @@ import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public class MobileProxy implements Runnable {
 
@@ -19,9 +21,14 @@ public class MobileProxy implements Runnable {
         void onServerConnectionAttempt(String serverHost, int serverPort);
     }
 
+    private static final int NONCE_SIZE = 32;
+    private static final int HMAC_SIZE = 32;
+    private static final String HMAC_ALGO = "HmacSHA256";
+
     private final String serverHost;
     private final int serverPort;
     private final String authCode;
+    private final byte[] authKeyBytes;
     private volatile boolean running = true;
     private volatile boolean retryScheduled = false;
     private Selector selector;
@@ -31,6 +38,7 @@ public class MobileProxy implements Runnable {
         this.serverHost = serverHost;
         this.serverPort = serverPort;
         this.authCode = authCode;
+        this.authKeyBytes = authCode.getBytes(StandardCharsets.UTF_8);
     }
 
     public void setConnectionListener(ConnectionListener listener) {
@@ -38,6 +46,21 @@ public class MobileProxy implements Runnable {
     }
 
     private record Connection(SelectionKey peerKey, ByteBuffer buffer) {
+    }
+
+    private static final class PendingChallengeResponse {
+        final ByteBuffer nonceBuffer = ByteBuffer.allocate(NONCE_SIZE);
+        ByteBuffer responseBuffer;  // set after nonce fully received
+    }
+
+    private static byte[] computeHmac(byte[] key, byte[] data) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGO);
+            mac.init(new SecretKeySpec(key, HMAC_ALGO));
+            return mac.doFinal(data);
+        } catch (Exception e) {
+            throw new RuntimeException("HMAC computation failed", e);
+        }
     }
 
     private static final int MAX_IDLE = 10;
@@ -148,9 +171,8 @@ public class MobileProxy implements Runnable {
             SelectionKey key = sc.keyFor(selector);
             if (key != null && key.isValid()) {
                 // It is idle or pending if it has no attachment (meaning not yet paired to a
-                // target)
-                // AND it is either connectable (pending) or readable (idle waiting for request)
-                if (key.attachment() == null) {
+                // target) or is still completing the challenge-response handshake
+                if (key.attachment() == null || key.attachment() instanceof PendingChallengeResponse) {
                     idleOrPending++;
                 }
             } else {
@@ -219,10 +241,9 @@ public class MobileProxy implements Runnable {
         try {
             if (channel.finishConnect()) {
                 retryScheduled = false; // Connection succeeded, clear backoff
-                System.out.println("Connected to ProxyServer. Sending auth code...");
-                ByteBuffer authBuffer = ByteBuffer.wrap(authCode.getBytes(StandardCharsets.US_ASCII));
-                channel.write(authBuffer);
-                System.out.println("Auth code sent. Waiting for traffic...");
+                System.out.println("Connected to ProxyServer. Awaiting challenge...");
+                PendingChallengeResponse pending = new PendingChallengeResponse();
+                key.attach(pending);
                 key.interestOps(SelectionKey.OP_READ);
             }
         } catch (IOException e) {
@@ -239,6 +260,37 @@ public class MobileProxy implements Runnable {
     private void handleRead(SelectionKey key, Selector selector) throws IOException {
         SocketChannel channel = (SocketChannel) key.channel();
         Object attachment = key.attachment();
+
+        // Handle challenge-response authentication
+        if (attachment instanceof PendingChallengeResponse pending) {
+            int read = channel.read(pending.nonceBuffer);
+            if (read == -1) {
+                System.out.println("ProxyServer disconnected during auth handshake.");
+                close(key, selector);
+                return;
+            }
+            if (pending.nonceBuffer.hasRemaining()) {
+                return; // Partial read - wait for more nonce bytes
+            }
+            // Full nonce received - compute HMAC and send response
+            pending.nonceBuffer.flip();
+            byte[] nonce = new byte[NONCE_SIZE];
+            pending.nonceBuffer.get(nonce);
+            byte[] hmac = computeHmac(authKeyBytes, nonce);
+            pending.responseBuffer = ByteBuffer.wrap(hmac);
+            // Try to write the HMAC response immediately
+            channel.write(pending.responseBuffer);
+            if (pending.responseBuffer.hasRemaining()) {
+                // Partial write - register for OP_WRITE to finish
+                key.interestOps(SelectionKey.OP_WRITE);
+            } else {
+                // Full HMAC sent - auth complete, transition to idle
+                System.out.println("Auth challenge-response completed. Waiting for traffic...");
+                key.attach(null);
+                key.interestOps(SelectionKey.OP_READ);
+            }
+            return;
+        }
 
         // If no attachment, this is the Tunnel reading from Server (Browser request)
         if (attachment == null) {
@@ -400,7 +452,22 @@ public class MobileProxy implements Runnable {
     }
 
     private void handleWrite(SelectionKey key) throws IOException {
-        Connection conn = (Connection) key.attachment();
+        Object attachment = key.attachment();
+
+        // Handle partial HMAC response write during auth handshake
+        if (attachment instanceof PendingChallengeResponse pending) {
+            SocketChannel channel = (SocketChannel) key.channel();
+            channel.write(pending.responseBuffer);
+            if (!pending.responseBuffer.hasRemaining()) {
+                // Full HMAC sent - auth complete, transition to idle
+                System.out.println("Auth challenge-response completed. Waiting for traffic...");
+                key.attach(null);
+                key.interestOps(SelectionKey.OP_READ);
+            }
+            return;
+        }
+
+        Connection conn = (Connection) attachment;
         SelectionKey sourceKey = conn.peerKey;
         Connection sourceConn = (Connection) sourceKey.attachment();
         writeToPeer(sourceKey, sourceConn);
