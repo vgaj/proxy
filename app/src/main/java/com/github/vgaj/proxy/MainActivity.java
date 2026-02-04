@@ -226,4 +226,9 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         appendLog("CONNECTING TO SERVER: " + serverHost + ":" + serverPort);
     }
 
+    @Override
+    public void onMaxConnectionsReached(int active, int max) {
+        appendLog("MAX CONNECTIONS: " + active + "/" + max + " - no idle connections available");
+    }
+
 }

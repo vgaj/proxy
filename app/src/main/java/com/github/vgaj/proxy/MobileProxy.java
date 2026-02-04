@@ -21,6 +21,7 @@ public class MobileProxy implements Runnable {
         void onConnectionFailure(String host, int port, String request, String error);
         void onServerConnectionFailed(String error);
         void onServerConnectionAttempt(String serverHost, int serverPort);
+        void onMaxConnectionsReached(int active, int max);
     }
 
     private static final int NONCE_SIZE = 32;
@@ -33,8 +34,9 @@ public class MobileProxy implements Runnable {
     private final byte[] authKeyBytes;
     private volatile boolean running = true;
     private volatile boolean retryScheduled = false;
+    private boolean maxConnectionsReported = false;
     private Selector selector;
-    private ConnectionListener listener;
+    private ConnectionListener statusReporter;
 
     public MobileProxy(String serverHost, int serverPort, String authCode) {
         this.serverHost = serverHost;
@@ -44,7 +46,7 @@ public class MobileProxy implements Runnable {
     }
 
     public void setConnectionListener(ConnectionListener listener) {
-        this.listener = listener;
+        this.statusReporter = listener;
     }
 
     private record Connection(SelectionKey peerKey, ByteBuffer buffer) {
@@ -105,8 +107,8 @@ public class MobileProxy implements Runnable {
             System.out.println("MobileProxy started. Targetting " + serverHost + ":" + serverPort);
 
             // Initial pool population
-            if (listener != null) {
-                listener.onServerConnectionAttempt(serverHost, serverPort);
+            if (statusReporter != null) {
+                statusReporter.onServerConnectionAttempt(serverHost, serverPort);
             }
             maintainConnectionPool(selector);
 
@@ -188,6 +190,17 @@ public class MobileProxy implements Runnable {
         int canCreate = MAX_TOTAL - tunnels.size();
         int toCreate = Math.min(needed, canCreate);
 
+        if (needed > 0 && canCreate <= 0) {
+            if (!maxConnectionsReported) {
+                maxConnectionsReported = true;
+                if (statusReporter != null) {
+                    statusReporter.onMaxConnectionsReached(tunnels.size(), MAX_TOTAL);
+                }
+            }
+        } else {
+            maxConnectionsReported = false;
+        }
+
         for (int i = 0; i < toCreate; i++) {
             initiateConnection(selector);
         }
@@ -213,8 +226,8 @@ public class MobileProxy implements Runnable {
     private void notifyServerConnectionFailed(String error) {
         System.err.println(error + " - retrying in 1 minute");
         if (!retryScheduled) {
-            if (listener != null) {
-                listener.onServerConnectionFailed(error);
+            if (statusReporter != null) {
+                statusReporter.onServerConnectionFailed(error);
             }
             scheduleRetry();
         }
@@ -229,8 +242,8 @@ public class MobileProxy implements Runnable {
                     retryScheduled = false;
                     return;
                 }
-                if (listener != null) {
-                    listener.onServerConnectionAttempt(serverHost, serverPort);
+                if (statusReporter != null) {
+                    statusReporter.onServerConnectionAttempt(serverHost, serverPort);
                 }
                 retryScheduled = false;
                 if (selector != null) {
@@ -338,8 +351,8 @@ public class MobileProxy implements Runnable {
             throws IOException {
         String request = new String(buffer.array(), 0, buffer.limit(), StandardCharsets.ISO_8859_1);
 
-        if (listener != null) {
-            listener.onRequestReceived(request);
+        if (statusReporter != null) {
+            statusReporter.onRequestReceived(request);
         }
 
         String host = null;
@@ -379,8 +392,8 @@ public class MobileProxy implements Runnable {
 
         if (host == null) {
             System.err.println("Could not parse host from request");
-            if (listener != null) {
-                listener.onConnectionFailure("unknown", 0, request, "Could not parse host from request");
+            if (statusReporter != null) {
+                statusReporter.onConnectionFailure("unknown", 0, request, "Could not parse host from request");
             }
             tunnelKey.channel().close();
             return;
@@ -395,15 +408,15 @@ public class MobileProxy implements Runnable {
             target.configureBlocking(false);
         } catch (IOException e) {
             System.err.println("Failed to connect: " + e.getMessage());
-            if (listener != null) {
-                listener.onConnectionFailure(host, port, request, e.getMessage());
+            if (statusReporter != null) {
+                statusReporter.onConnectionFailure(host, port, request, e.getMessage());
             }
             tunnelKey.channel().close();
             return;
         }
 
-        if (listener != null) {
-            listener.onConnectionSuccess(host, port);
+        if (statusReporter != null) {
+            statusReporter.onConnectionSuccess(host, port);
         }
 
         registerTarget(selector, tunnelKey, target, buffer, headerEnd, isConnect);
