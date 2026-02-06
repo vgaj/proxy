@@ -12,21 +12,26 @@ import java.util.Iterator;
 import java.util.Set;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import android.util.Log;
 
 public class MobileProxy implements Runnable {
+
+    private static final String TAG = "MobileProxy";
 
     public interface ConnectionListener {
         void onRequestReceived(String request);
         void onConnectionSuccess(String host, int port);
         void onConnectionFailure(String host, int port, String request, String error);
-        void onServerConnectionFailed(String error);
+        void onServerConnectionFailed(String error, int retryMinutes);
         void onServerConnectionAttempt(String serverHost, int serverPort);
-        void onMaxConnectionsReached(int active, int max);
+        void onMaxConnectionsReached(int max);
     }
 
     private static final int NONCE_SIZE = 32;
     private static final int HMAC_SIZE = 32;
     private static final String HMAC_ALGO = "HmacSHA256";
+
+    private static final int RETRY_INTERVAL_MINUTES = 1;
 
     private final String serverHost;
     private final int serverPort;
@@ -67,8 +72,8 @@ public class MobileProxy implements Runnable {
         }
     }
 
-    private static final int MAX_IDLE = 10;
-    private static final int MAX_TOTAL = 100;
+    private static final int MAX_IDLE = 20;
+    private static final int MAX_TOTAL = 500;
     private final Set<SocketChannel> tunnels = new HashSet<>();
 
     public void stop() {
@@ -104,7 +109,7 @@ public class MobileProxy implements Runnable {
     public void run() {
         try {
             selector = Selector.open();
-            System.out.println("MobileProxy started. Targetting " + serverHost + ":" + serverPort);
+            Log.d(TAG, "MobileProxy started. Targeting " + serverHost + ":" + serverPort);
 
             // Initial pool population
             if (statusReporter != null) {
@@ -141,13 +146,13 @@ public class MobileProxy implements Runnable {
                             handleWrite(key);
                         }
                     } catch (Exception e) {
-                        System.out.println("Error: " + e.getMessage());
+                        Log.e(TAG, "Error in main loop", e);
                         close(key, selector);
                     }
                 }
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e(TAG, "IOException in run()", e);
         } finally {
             closeAllConnections();
             if (selector != null) {
@@ -194,7 +199,7 @@ public class MobileProxy implements Runnable {
             if (!maxConnectionsReported) {
                 maxConnectionsReported = true;
                 if (statusReporter != null) {
-                    statusReporter.onMaxConnectionsReached(tunnels.size(), MAX_TOTAL);
+                    statusReporter.onMaxConnectionsReached(MAX_TOTAL);
                 }
             }
         } else {
@@ -206,7 +211,7 @@ public class MobileProxy implements Runnable {
         }
 
         if (toCreate > 0) {
-            System.out.println("Pool maintenance: Created " + toCreate + " new connections. Total: " + tunnels.size()
+            Log.d(TAG, "Pool maintenance: Created " + toCreate + " new connections. Total: " + tunnels.size()
                     + ", Idle/Pending: " + (idleOrPending + toCreate));
         }
     }
@@ -224,10 +229,11 @@ public class MobileProxy implements Runnable {
     }
 
     private void notifyServerConnectionFailed(String error) {
-        System.err.println(error + " - retrying in 1 minute");
+        Log.e(TAG, error + " - retrying in " + RETRY_INTERVAL_MINUTES
+                + (RETRY_INTERVAL_MINUTES == 1 ? " minute" : " minutes"));
         if (!retryScheduled) {
             if (statusReporter != null) {
-                statusReporter.onServerConnectionFailed(error);
+                statusReporter.onServerConnectionFailed(error, RETRY_INTERVAL_MINUTES);
             }
             scheduleRetry();
         }
@@ -237,7 +243,7 @@ public class MobileProxy implements Runnable {
         retryScheduled = true;
         new Thread(() -> {
             try {
-                Thread.sleep(60000); // 1 minute
+                Thread.sleep(RETRY_INTERVAL_MINUTES * 60000);
                 if (!running) {
                     retryScheduled = false;
                     return;
@@ -260,7 +266,7 @@ public class MobileProxy implements Runnable {
         try {
             if (channel.finishConnect()) {
                 retryScheduled = false; // Connection succeeded, clear backoff
-                System.out.println("Connected to ProxyServer. Awaiting challenge...");
+                Log.d(TAG, "Connected to ProxyServer. Awaiting challenge...");
                 PendingChallengeResponse pending = new PendingChallengeResponse();
                 key.attach(pending);
                 key.interestOps(SelectionKey.OP_READ);
@@ -284,7 +290,7 @@ public class MobileProxy implements Runnable {
         if (attachment instanceof PendingChallengeResponse pending) {
             int read = channel.read(pending.nonceBuffer);
             if (read == -1) {
-                System.out.println("ProxyServer disconnected during auth handshake.");
+                Log.e(TAG, "ProxyServer disconnected during auth handshake");
                 close(key, selector);
                 return;
             }
@@ -304,7 +310,7 @@ public class MobileProxy implements Runnable {
                 key.interestOps(SelectionKey.OP_WRITE);
             } else {
                 // Full HMAC sent - auth complete, transition to idle
-                System.out.println("Auth challenge-response completed. Waiting for traffic...");
+                Log.d(TAG, "Auth challenge-response completed. Waiting for traffic...");
                 key.attach(null);
                 key.interestOps(SelectionKey.OP_READ);
             }
@@ -316,7 +322,7 @@ public class MobileProxy implements Runnable {
             ByteBuffer buf = ByteBuffer.allocate(8192);
             int n = channel.read(buf);
             if (n == -1) {
-                System.out.println("ProxyServer closed connection.");
+                Log.d(TAG, "ProxyServer closed connection");
                 close(key, selector);
                 return;
             }
@@ -391,7 +397,7 @@ public class MobileProxy implements Runnable {
         }
 
         if (host == null) {
-            System.err.println("Could not parse host from request");
+            Log.e(TAG, "Could not parse host from request");
             if (statusReporter != null) {
                 statusReporter.onConnectionFailure("unknown", 0, request, "Could not parse host from request");
             }
@@ -399,7 +405,7 @@ public class MobileProxy implements Runnable {
             return;
         }
 
-        System.out.println("Connecting to target: " + host + ":" + port);
+        Log.d(TAG, "Connecting to target: " + host + ":" + port);
 
         SocketChannel target = SocketChannel.open();
         try {
@@ -407,7 +413,7 @@ public class MobileProxy implements Runnable {
             target.connect(new InetSocketAddress(host, port));
             target.configureBlocking(false);
         } catch (IOException e) {
-            System.err.println("Failed to connect: " + e.getMessage());
+            Log.e(TAG, "Failed to connect to " + host + ":" + port, e);
             if (statusReporter != null) {
                 statusReporter.onConnectionFailure(host, port, request, e.getMessage());
             }
@@ -479,7 +485,7 @@ public class MobileProxy implements Runnable {
             channel.write(pending.responseBuffer);
             if (!pending.responseBuffer.hasRemaining()) {
                 // Full HMAC sent - auth complete, transition to idle
-                System.out.println("Auth challenge-response completed. Waiting for traffic...");
+                Log.d(TAG, "Auth challenge-response completed. Waiting for traffic...");
                 key.attach(null);
                 key.interestOps(SelectionKey.OP_READ);
             }
@@ -520,7 +526,7 @@ public class MobileProxy implements Runnable {
             try {
                 maintainConnectionPool(selector);
             } catch (IOException e) {
-                System.err.println("Failed to maintain pool: " + e.getMessage());
+                Log.e(TAG, "Failed to maintain pool", e);
             }
         }
     }

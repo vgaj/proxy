@@ -18,8 +18,8 @@ import javax.crypto.spec.SecretKeySpec;
 
 public class ProxyServer {
 
-    private static final int BROWSER_PORT = 8888;
-    private static final int MOBILE_PORT = 9999;
+    private static final int DEFAULT_BROWSER_PORT = 8888;
+    private static final int DEFAULT_MOBILE_PORT = 9999;
     private static final String DEFAULT_AUTH_CODE = "5678";
 
     private static final int NONCE_SIZE = 32;
@@ -65,6 +65,9 @@ public class ProxyServer {
         authKeyBytes = expectedAuthCode.getBytes(StandardCharsets.UTF_8);
         System.out.println("Using auth code: " + expectedAuthCode);
 
+        int browserPort = Integer.parseInt(System.getenv().getOrDefault("PROXY_BROWSER_PORT", String.valueOf(DEFAULT_BROWSER_PORT)));
+        int mobilePort = Integer.parseInt(System.getenv().getOrDefault("PROXY_MOBILE_PORT", String.valueOf(DEFAULT_MOBILE_PORT)));
+
         Selector selector = Selector.open();
 
         // Register shutdown hook to close all connections cleanly
@@ -86,18 +89,18 @@ public class ProxyServer {
         // Browser Listener
         ServerSocketChannel browserServer = ServerSocketChannel.open();
         browserServer.configureBlocking(false);
-        browserServer.bind(new InetSocketAddress(BROWSER_PORT));
+        browserServer.bind(new InetSocketAddress(browserPort));
         browserServer.register(selector, SelectionKey.OP_ACCEPT, "BROWSER_ACCEPT");
 
         // Mobile Listener
         ServerSocketChannel mobileServer = ServerSocketChannel.open();
         mobileServer.configureBlocking(false);
-        mobileServer.bind(new InetSocketAddress(MOBILE_PORT));
+        mobileServer.bind(new InetSocketAddress(mobilePort));
         mobileServer.register(selector, SelectionKey.OP_ACCEPT, "MOBILE_ACCEPT");
 
         System.out.println("ProxyServer started.");
-        System.out.println("Listening for Browsers on port " + BROWSER_PORT);
-        System.out.println("Listening for Mobiles on port " + MOBILE_PORT);
+        System.out.println("Listening for Browsers on port " + browserPort);
+        System.out.println("Listening for Mobiles on port " + mobilePort);
 
         while (true) {
             selector.select();

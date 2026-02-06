@@ -178,7 +178,17 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         });
     }
 
-    private static final int MAX_LOG_LINES = 20;
+    private int calculateMaxLogLines() {
+        int scrollViewHeight = svLog.getHeight() - svLog.getPaddingTop() - svLog.getPaddingBottom();
+        if (scrollViewHeight <= 0) {
+            return 20; // Fallback before layout
+        }
+        int lineHeight = tvLog.getLineHeight();
+        if (lineHeight <= 0) {
+            return 20; // Fallback
+        }
+        return Math.max(5, scrollViewHeight / lineHeight);
+    }
 
     private void appendLog(String message) {
         runOnUiThread(() -> {
@@ -188,7 +198,8 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
             String[] lines = currentText.isEmpty() ? new String[0] : currentText.split("\n");
 
             StringBuilder sb = new StringBuilder();
-            int startIndex = Math.max(0, lines.length - MAX_LOG_LINES + 1);
+            int maxLines = calculateMaxLogLines();
+            int startIndex = Math.max(0, lines.length - maxLines + 1);
             for (int i = startIndex; i < lines.length; i++) {
                 sb.append(lines[i]).append("\n");
             }
@@ -202,7 +213,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
     @Override
     public void onRequestReceived(String request) {
         String firstLine = request != null ? request.split("\r\n")[0] : null;
-        appendLog("REQUEST: " + firstLine);
+        appendLog("REQUESTED: " + firstLine);
     }
 
     @Override
@@ -217,8 +228,10 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
     }
 
     @Override
-    public void onServerConnectionFailed(String error) {
-        appendLog("SERVER ERROR: " + error + " - retrying in 1 minute");
+    public void onServerConnectionFailed(String error, int retryMinutes) {
+        appendLog("SERVER ERROR: " + error + " - retrying in "
+                + retryMinutes + (retryMinutes == 1 ? " minute" : " minutes")
+        );
     }
 
     @Override
@@ -227,8 +240,8 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
     }
 
     @Override
-    public void onMaxConnectionsReached(int active, int max) {
-        appendLog("MAX CONNECTIONS: " + active + "/" + max + " - no idle connections available");
+    public void onMaxConnectionsReached(int max) {
+        appendLog("MAX CONNECTIONS: " + max + " reached, not creating more");
     }
 
 }

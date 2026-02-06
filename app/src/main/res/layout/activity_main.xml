@@ -148,7 +148,8 @@
         android:layout_weight="1"
         android:layout_marginTop="2dp"
         android:background="#F0F0F0"
-        android:padding="6dp">
+        android:padding="6dp"
+        android:fillViewport="true">
 
         <TextView
             android:id="@+id/tvLog"
