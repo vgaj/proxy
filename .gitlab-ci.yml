@@ -13,3 +13,5 @@ build-docker-image:
   rules:
     - changes:
         - server/src/main/java/com/github/vgaj/proxy/ProxyServer.java
+        - LICENSE
+        - Dockerfile
