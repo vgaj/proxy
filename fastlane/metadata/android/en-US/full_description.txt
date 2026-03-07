@@ -1,0 +1,32 @@
+Proxy Exit is NOT a way to set up a proxy on your phone. It is a part of a setup to route your desktop browser's internet traffic through your phone's mobile data connection.
+
+Setup requires three components: a Proxy Server, this app, and a configured browser.
+
+● Start the Proxy Server
+
+Run the following Docker command on a machine accessible from the internet:
+
+docker run -d -p 8888:8888 -p 9999:9999 -e PROXY_AUTH_CODE=XXX registry.gitlab.com/viru7/proxy:latest
+
+Port 8888 — browser HTTP proxy connections
+Port 9999 — mobile app connections
+XXX — your chosen password
+
+If the server is running on a home machine, ensure port 9999 is forwarded to it.
+
+● Configure the app
+
+Enter the server's IP address, port (9999), and your password, then tap Start.
+
+● Configure your browser
+
+Set the browser's HTTP proxy to the server's IP address and port (8888).
+
+How it works:
+
+1. The app connects to the Proxy Server, making the phone available as a proxy exit node.
+2. When the browser needs to make an HTTP request, it sends it to the Proxy Server.
+3. The Proxy Server forwards the request to the phone over the established connection.
+4. The phone fetches the content via mobile data and returns it through the server to the browser.
+
+For more details see: https://gitlab.com/viru7/proxy

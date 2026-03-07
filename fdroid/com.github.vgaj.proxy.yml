@@ -1,0 +1,22 @@
+Categories:
+  - VPN & Proxy
+
+License: MIT
+
+WebSite: https://github.com/vgaj/proxy
+SourceCode: https://github.com/vgaj/proxy
+IssueTracker: https://github.com/vgaj/proxy/issues
+
+AutoName: Proxy Exit
+
+Builds:
+  - versionName: '1.0'
+    versionCode: 1
+    commit: v1.0
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '1.0'
+CurrentVersionCode: 1
