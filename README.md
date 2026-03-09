@@ -26,9 +26,9 @@ docker run -d -p 8888:8888 -p 9999:9999 -e PROXY_AUTH_CODE=XXX registry.gitlab.c
 
 If the server is on a home machine, ensure port **9999** is forwarded to it.
 
-Note that the only thing in the docker image is a single file Java class, you can just run:
+Note that what is inside the docker image is a single file Java class, so you can also just run:
 ```
-java server/src/main/java/com/github/vgaj/proxy/ProxyServer.java
+java ProxyServer.java
 ```
 
 ### 2. Configure the app
@@ -37,7 +37,16 @@ Enter the server's IP address, port (`9999`), and your password, then tap **Star
 
 ### 3. Configure your browser
 
-Set the browser's HTTP proxy to the server's IP address and port `8888`.
+Set the browser's HTTP and HTTPS proxy to the server's IP address and port `8888`.
+
+## Building
+
+Build from the command line with:
+
+```
+export ANDROID_HOME=/path/to/android/sdk
+./gradlew assembleRelease
+```
 
 ## How it works
 

@@ -18,9 +18,11 @@ If the server is running on a home machine, ensure port 9999 is forwarded to it.
 
 Enter the server's IP address, port (9999), and your password, then tap Start.
 
+Keep the app running in the foreground while in use. If the connection to the server drops, the app will automatically retry every minute.
+
 ● Configure your browser
 
-Set the browser's HTTP proxy to the server's IP address and port (8888).
+Set the browser's HTTP and HTTPS proxy to the server's IP address and port (8888).
 
 How it works:
 
