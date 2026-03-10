@@ -2,6 +2,8 @@
 
 This gives you a way to route your browser's internet traffic through an Android phone's mobile data connection.
 
+If you want to access content that is geo-restricted to a specific country, this is a simple alternative to a commercial VPN — provided you have a trusted contact there with an Android phone. Unlike a VPN service, you control both ends of the connection: your contact runs the app on their phone and you connect through it directly, with no third-party servers involved beyond the relay you host yourself.
+
 ## Components
 
 - **Proxy Server** — a service that brokers connections between the browser and phone
