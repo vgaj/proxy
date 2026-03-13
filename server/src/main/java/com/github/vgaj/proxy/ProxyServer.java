@@ -61,7 +61,7 @@ public class ProxyServer {
     }
 
     public static void main(String[] args) throws IOException {
-        String expectedAuthCode = System.getenv().getOrDefault("PROXY_AUTH_CODE", DEFAULT_AUTH_CODE);
+        String expectedAuthCode = System.getenv().getOrDefault("AUTH_CODE", DEFAULT_AUTH_CODE);
         authKeyBytes = expectedAuthCode.getBytes(StandardCharsets.UTF_8);
         System.out.println("Using auth code: " + expectedAuthCode);
 

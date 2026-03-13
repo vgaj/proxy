@@ -6,7 +6,7 @@ Setup requires three components: a Proxy Server, this app, and a configured brow
 
 Run the following Docker command on a machine accessible from the internet:
 
-docker run -d -p 8888:8888 -p 9999:9999 -e PROXY_AUTH_CODE=XXX registry.gitlab.com/viru7/proxy:latest
+docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXX registry.gitlab.com/viru7/proxy:latest
 
 Port 8888 — browser HTTP proxy connections
 Port 9999 — mobile app connections

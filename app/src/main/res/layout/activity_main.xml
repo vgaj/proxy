@@ -110,7 +110,7 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-    <!-- Row 3: Log label + Clear button -->
+    <!-- Row 3: Log label + Clear button + Help button -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -126,6 +126,20 @@
             android:textSize="13sp" />
 
         <Button
+            android:id="@+id/btnHelp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="?android:attr/buttonBarButtonStyle"
+            android:text="Help"
+            android:textSize="12sp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
+
+        <Button
             android:id="@+id/btnClearLog"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -138,6 +152,7 @@
             android:paddingBottom="2dp"
             android:paddingStart="8dp"
             android:paddingEnd="8dp" />
+
     </LinearLayout>
 
     <!-- Log area: takes all remaining space -->

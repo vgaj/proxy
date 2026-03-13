@@ -16,7 +16,7 @@ If you want to access content that is geo-restricted to a specific country, this
 
 Run this Docker command on a machine accessible from the internet:
 ```
-docker run -d -p 8888:8888 -p 9999:9999 -e PROXY_AUTH_CODE=XXX registry.gitlab.com/viru7/proxy:latest
+docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXX registry.gitlab.com/viru7/proxy:latest
 ```
 
 | Port | Purpose |

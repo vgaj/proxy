@@ -1,5 +1,6 @@
 package com.github.vgaj.proxy;
 
+import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
@@ -28,6 +29,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
     private Button btnStart;
     private Button btnStop;
     private Button btnClearLog;
+    private Button btnHelp;
     private TextView tvStatus;
     private TextView tvLog;
     private ScrollView svLog;
@@ -47,6 +49,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         btnStart = findViewById(R.id.btnStart);
         btnStop = findViewById(R.id.btnStop);
         btnClearLog = findViewById(R.id.btnClearLog);
+        btnHelp = findViewById(R.id.btnHelp);
         tvStatus = findViewById(R.id.tvStatus);
         tvLog = findViewById(R.id.tvLog);
         svLog = findViewById(R.id.svLog);
@@ -75,6 +78,7 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
         btnStart.setOnClickListener(v -> startProxy());
         btnStop.setOnClickListener(v -> stopProxy());
         btnClearLog.setOnClickListener(v -> tvLog.setText(""));
+        btnHelp.setOnClickListener(v -> showHelp());
     }
 
     private void validateInputs() {
@@ -242,6 +246,22 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
     @Override
     public void onMaxConnectionsReached(int max) {
         appendLog("MAX CONNECTIONS: " + max + " reached, not creating more");
+    }
+
+    private void showHelp() {
+        String helpText =
+            "This app allows you to route a desktop browser's traffic through this phone.\n\n" +
+            "1. Run the Proxy Server on a home machine (replace XXXX with your chosen password):\n\n" +
+            "docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXXX registry.gitlab.com/viru7/proxy:latest\n\n" +
+            "2. On the home router, ensure port 9999 is forwarded to the server.\n\n" +
+            "3. Configure this app. Enter the server's public IP address, port (9999), and password, then tap Start.\n\n" +
+            "4. Configure your browser. Set the browser's proxy to the server's IP address and port 8888.";
+
+        new AlertDialog.Builder(this)
+            .setTitle("Setup")
+            .setMessage(helpText)
+            .setPositiveButton("OK", null)
+            .show();
     }
 
 }
