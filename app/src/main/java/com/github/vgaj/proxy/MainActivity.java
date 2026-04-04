@@ -33,7 +33,6 @@ public class MainActivity extends AppCompatActivity implements MobileProxy.Conne
     private TextView tvStatus;
     private TextView tvLog;
     private ScrollView svLog;
-
     private MobileProxy proxy;
     private Thread proxyThread;
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());

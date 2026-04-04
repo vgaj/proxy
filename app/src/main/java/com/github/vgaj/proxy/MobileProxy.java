@@ -30,7 +30,6 @@ public class MobileProxy implements Runnable {
     private static final int NONCE_SIZE = 32;
     private static final int HMAC_SIZE = 32;
     private static final String HMAC_ALGO = "HmacSHA256";
-
     private static final int RETRY_INTERVAL_MINUTES = 1;
 
     private final String serverHost;
