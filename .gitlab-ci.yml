@@ -1,22 +1,39 @@
 stages:
   - build
 
-build-apk:
+build-debug-apk:
   stage: build
   image: mingc/android-build-box:latest
   script:
     - chmod +x ./gradlew
     - ./gradlew assembleDebug
   artifacts:
-    name: "proxy-app-${CI_COMMIT_SHORT_SHA}"
+    name: "proxy-exit-debug-${CI_COMMIT_SHORT_SHA}"
     paths:
       - app/build/outputs/apk/debug/app-debug.apk
-    expire_in: never
+    expire_in: 1 week
   rules:
+    - if: $CI_COMMIT_TAG
+      when: never
     - changes:
         - app/**/*
         - build.gradle
         - settings.gradle
+
+build-release-apk:
+  stage: build
+  image: mingc/android-build-box:latest
+  script:
+    - echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+    - chmod +x ./gradlew
+    - ./gradlew assembleRelease
+  artifacts:
+    name: "proxy-exit-release-${CI_COMMIT_TAG}"
+    paths:
+      - app/build/outputs/apk/release/app-release.apk
+    expire_in: never
+  rules:
+    - if: $CI_COMMIT_TAG
 
 build-docker-image:
   stage: build

@@ -14,8 +14,23 @@ android {
         versionName "1.0"
     }
 
+    signingConfigs {
+        release {
+            def props = new Properties()
+            def propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) {
+                props.load(new FileInputStream(propsFile))
+            }
+            storeFile file("${rootDir}/release.jks")
+            storePassword props.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD")
+            keyAlias props.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS")
+            keyPassword props.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
