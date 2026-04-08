@@ -33,9 +33,13 @@ Note that what is inside the docker image is a single file Java class, so you ca
 java ProxyServer.java
 ```
 
-### 2. Configure the app
+### 2. Install and configure the Proxy Exit app
 
-Enter the server's IP address, port (`9999`), and your password, then tap **Start**.
+On your phone navigate to the following URL and download the APK for the Proxy Exit app: https://gitlab.com/viru7/proxy/-/jobs/13819560752/artifacts/browse/app/build/outputs/apk/release/
+
+Install it following any Android prompts to allow the installation.
+
+Open the app and enter the server's IP address, port (`9999`), and your password, then tap **Start**.
 
 ### 3. Configure your browser
 
