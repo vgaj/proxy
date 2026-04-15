@@ -1,14 +1,26 @@
 # Mobile Phone Proxy
+This project gives you a way to route your browser's internet traffic through an Android phone's mobile data connection. If you want to access content that is geo-restricted to a specific country, this is a simple alternative to a commercial VPN - provided you have a trusted contact there with an Android phone. Unlike a VPN service, you control both ends of the connection: your contact runs the app on their phone and you connect through it directly, with no third-party servers involved beyond the relay you host yourself.
 
-This gives you a way to route your browser's internet traffic through an Android phone's mobile data connection.
+## How it works
+##### Components
+- **Proxy Server** - a service that brokers connections between the browser and phone
+- **Proxy Exit** - runs on the phone and connects to the Proxy Server
+- **Browser** - configured to use the Proxy Server as an HTTP proxy
 
-If you want to access content that is geo-restricted to a specific country, this is a simple alternative to a commercial VPN — provided you have a trusted contact there with an Android phone. Unlike a VPN service, you control both ends of the connection: your contact runs the app on their phone and you connect through it directly, with no third-party servers involved beyond the relay you host yourself.
+##### Flow
+1. The app connects to the Proxy Server, making the phone available as a proxy exit node.
+2. When the browser needs to make an HTTP request, it sends it to the Proxy Server.
+3. The Proxy Server forwards the request to the phone over the established connection.
+4. The phone fetches the content via mobile data and returns it through the server to the browser.
 
-## Components
+```mermaid
+flowchart LR
+    B[Browser] -- 2 --> P[Proxy Server]
+    M[Phone] -- 1 --> P
+    P -- 3 --> M
+    M -- 4 --> W[Website]
+```
 
-- **Proxy Server** — a service that brokers connections between the browser and phone
-- **Proxy Exit** — runs on the phone and connects to the Proxy Server
-- **Browser** — configured to use the Proxy Server as an HTTP proxy
 
 ## Setup
 
@@ -53,18 +65,3 @@ Build from the command line with:
 export ANDROID_HOME=/path/to/android/sdk
 ./gradlew assembleRelease
 ```
-
-## How it works
-
-```mermaid
-flowchart BT
-    B[Browser] -- 2 --> P[Proxy Server]
-    M[Phone] -- 1 --> P
-    P -- 3 --> M
-    M -- 4 --> W[Website]
-```
-
-1. The app connects to the Proxy Server, making the phone available as a proxy exit node.
-2. When the browser needs to make an HTTP request, it sends it to the Proxy Server.
-3. The Proxy Server forwards the request to the phone over the established connection.
-4. The phone fetches the content via mobile data and returns it through the server to the browser.
