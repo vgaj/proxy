@@ -1,20 +1,19 @@
 # Mobile Phone Proxy
-This project gives you a way to route your browser's internet traffic through an Android phone's mobile data connection. 
+This project gives you a way to route your browser's web traffic through an Android phone's mobile data connection. 
 For example if you want to access content that is geo-restricted to a specific country, 
 this is a simple alternative to a commercial VPN - provided you have a trusted contact there with an Android phone. 
 
-
 ## How it works
-#### Components
-- **Proxy Server** is a service that brokers connections between the browser and phone
-- **Proxy Exit** is an Android app that runs on the phone and connects to the Proxy Server
+#### Components:
+- The **Proxy Server** is a service that brokers connections between the browser and phone
+- **Proxy Exit** is an Android app that runs on the phone
 - Your **browser** needs to be configured to use the Proxy Server as an HTTP proxy
 
-#### Flow
+#### Flow:
 1. The Proxy Exit app connects to the Proxy Server, making the phone available as a proxy exit node.
 2. When the browser needs to make an HTTP request, it sends it to the Proxy Server.
 3. The Proxy Server forwards the request to the phone over the established connection.
-4. The phone fetches the content via mobile data and returns it through the server to the browser.
+4. The phone fetches the content and returns it through the server to the browser.
 
 ```mermaid
 flowchart BT
@@ -44,9 +43,7 @@ If the server is on a home machine, ensure port **9999** is forwarded to it.
 
 ### 2. Proxy Exit
 
-On your phone navigate to the following URL and download the APK for the Proxy Exit app: https://gitlab.com/viru7/proxy/-/jobs/13819560752/artifacts/browse/app/build/outputs/apk/release/
-
-Install it following any Android prompts to allow the installation.
+On your phone navigate to the following URL and download the APK for the Proxy Exit app, and install it following any Android prompts to allow the installation: https://gitlab.com/viru7/proxy/-/jobs/13819560752/artifacts/browse/app/build/outputs/apk/release/
 
 Open the app and enter the server's public IP address, port (`9999`), and your password, then tap **Start**.
 
