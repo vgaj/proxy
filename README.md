@@ -18,7 +18,7 @@ this is a simple alternative to a commercial VPN - provided you have a trusted c
 ```mermaid
 flowchart BT
     B[Browser] -- 2 --> P[Proxy Server]
-    M[Phone] -- 1 --> P
+    M[Phone - Proxy Exit] -- 1 --> P
     P -- 3 --> M
     M -- 4 --> W[Website]
 ```
@@ -39,9 +39,8 @@ docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXXX registry.gitlab.com/vi
 
 `XXXX` is your chosen password.
 
-If the server is behind a router like a home network, ensure port **9999** is forwarded to it.
-Make sure to know its public and internal IP address.
-
+If the server is behind NAT (such as on a home network), ensure that port **9999** is forwarded to it. 
+Also, confirm that you know both its public IP address and its internal (local) IP address.
 
 ### 2. Proxy Exit
 
@@ -54,7 +53,7 @@ Open the app and enter the server's public IP address, port (`9999`), and your p
 
 Set the browser's HTTP and HTTPS proxy to the server's internal IP address and port `8888`.
 On Firefox this can be set directly.
-For Chrome this usually comes from the OS - on Android open Wi-Fi settings for your network, click the pen icon for edit, and expand Advanced Options to find it.
+For Chrome, this setting is typically inherited from the operating system. On Android, open your Wi-Fi settings, select your current network, tap the edit (pencil) icon, and expand Advanced options to locate it.
 
 ## FAQ
 #### Why would I use this rather than a VPN for bypassing geo-restrictions?
@@ -68,7 +67,7 @@ export ANDROID_HOME=/path/to/android/sdk
 ./gradlew assembleRelease
 ```
 
-### Do I have to use Docker to run the Proxy Server?
+#### Do I have to use Docker to run the Proxy Server?
 No. What is inside the docker image is actually just a single file Java class, so if you have Java installed you can also just run:
 ```
 java ProxyServer.java
