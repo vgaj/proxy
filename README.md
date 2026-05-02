@@ -29,7 +29,7 @@ flowchart BT
 
 Run this Docker command on a machine accessible from the internet:
 ```
-docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXX registry.gitlab.com/viru7/proxy:latest
+docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXXX registry.gitlab.com/viru7/proxy:latest
 ```
 
 | Port | Purpose |
@@ -37,19 +37,24 @@ docker run -d -p 8888:8888 -p 9999:9999 -e AUTH_CODE=XXX registry.gitlab.com/vir
 | 8888 | Browser HTTP proxy connections |
 | 9999 | Mobile app connections |
 
-`XXX` is your chosen password.
+`XXXX` is your chosen password.
 
-If the server is on a home machine, ensure port **9999** is forwarded to it.
+If the server is behind a router like a home network, ensure port **9999** is forwarded to it.
+Make sure to know its public and internal IP address.
+
 
 ### 2. Proxy Exit
 
-On your phone navigate to the following URL and download the APK for the Proxy Exit app, and install it following any Android prompts to allow the installation: https://gitlab.com/viru7/proxy/-/jobs/13819560752/artifacts/browse/app/build/outputs/apk/release/
+On the phone navigate to the following URL and download the APK for the Proxy Exit app, and install it following any Android prompts to allow the installation: 
+https://gitlab.com/viru7/proxy/-/jobs/13819560752/artifacts/browse/app/build/outputs/apk/release/
 
 Open the app and enter the server's public IP address, port (`9999`), and your password, then tap **Start**.
 
 ### 3. Configure your browser
 
-Set the browser's HTTP and HTTPS proxy to the server's IP address and port `8888`.
+Set the browser's HTTP and HTTPS proxy to the server's internal IP address and port `8888`.
+On Firefox this can be set directly.
+For Chrome this usually comes from the OS - on Android open Wi-Fi settings for your network, click the pen icon for edit, and expand Advanced Options to find it.
 
 ## FAQ
 #### Why would I use this rather than a VPN for bypassing geo-restrictions?
