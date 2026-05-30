@@ -44,7 +44,8 @@ Also, confirm that you know both its public IP address and its internal (local) 
 
 ### 2. Proxy Exit
 
-On the phone navigate to the following URL and download the APK for the Proxy Exit app, and install it following any Android prompts to allow the installation: 
+On the phone if you have F-Droid installed search for the Proxy Exit app and install it. 
+Otherwise navigate to the following URL and download the APK for the app, and install it following any Android prompts to allow the installation: 
 https://gitlab.com/viru7/proxy/-/jobs/13819560752/artifacts/browse/app/build/outputs/apk/release/
 
 Open the app and enter the server's public IP address, port (`9999`), and your password, then tap **Start**.
